@@ -1,0 +1,19 @@
+{% import "game/_ui.html" as ui %}
+<h1 class="screen-title">{{ s.heading }}</h1>
+<p class="screen-desc">{{ s.description }}</p>
+<div class="info-row">
+  <span>Name: {{ s.name }}</span>
+  <span>Job: {{ s.job }}</span>
+  <span>Credits: {{ "%.2f"|format(s.credits) }}</span>
+</div>
+<div class="quarters-grid">
+  {{ ui.btn("Bed", "room.bed", cls="btn-wide") }}
+  {{ ui.btn("Storage Locker", "room.storage", cls="btn-wide") }}
+  {{ ui.btn("Computer", "room.computer", cls="btn-wide") }}
+  {{ ui.btn("Character Sheet", "game.character_sheet", cls="btn-wide") }}
+  {{ ui.btn("Door", "room.door", cls="btn-wide span-2") }}
+</div>
+<div class="stack quarters-footer">
+  {{ ui.btn("Hands", "game.hands", cls="btn-wide") }}
+  {{ ui.btn("Save and Exit", "room.save_and_exit", cls="btn-wide") }}
+</div>

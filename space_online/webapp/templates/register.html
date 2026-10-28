@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Register — Space Station Explorer{% endblock %}
+{% block content %}
+<section class="card auth-card">
+  <h1>Register</h1>
+  <p class="muted">Each account has one character. Your progress is saved to it automatically.</p>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username
+      <input type="text" name="username" value="{{ username }}" autocomplete="username"
+             minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" required autofocus>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="new-password" minlength="6" maxlength="128" required>
+    </label>
+    <label>Confirm Password
+      <input type="password" name="confirm_password" autocomplete="new-password" minlength="6" maxlength="128" required>
+    </label>
+    <button class="btn" type="submit">Create Account</button>
+  </form>
+  <p class="muted">Already registered? <a href="{{ url_for('login') }}">Log in</a></p>
+</section>
+{% endblock %}

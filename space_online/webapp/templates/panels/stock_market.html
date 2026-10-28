@@ -1,0 +1,78 @@
+{% import "game/_ui.html" as ui %}
+<div class="market">
+  <div class="market-left">
+    {% for group, label, options in p.filter_groups %}
+    <p class="filter-label">{{ label }}</p>
+    <div class="toggle-row">
+      {% for value, option_label in options %}
+        {{ ui.btn(option_label, "panel.set_filter", {"group": group, "value": value}, "btn-toggle" ~ (" active" if p.filters[group] == value else "")) }}
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div class="listbox short" data-scroll-key="companies">
+      {% for name in p.companies %}
+        {{ ui.row(name, "panel.select", {"name": name}, name == p.selected) }}
+      {% endfor %}
+    </div>
+
+    {% if p.detail %}
+    <form class="trade-form">
+      <div class="trade-line">
+        <label for="shares-input">Shares:</label>
+        <input id="shares-input" name="shares" type="number" min="1" step="1" value="1" list="share-options"
+               data-share-input data-price="{{ p.detail.price }}" data-credits="{{ p.credits }}" data-owned="{{ p.detail.owned }}">
+        <datalist id="share-options">{% for n in p.share_options %}<option value="{{ n }}">{% endfor %}</datalist>
+        <span data-share-total>Total: 0.00</span>
+      </div>
+      <div class="trade-line">
+        <button type="button" class="btn btn-small" data-set-input="shares-input" data-value="{{ p.detail.max_buy }}">Max Buy ({{ p.detail.max_buy }})</button>
+        <button type="button" class="btn btn-small" data-set-input="shares-input" data-value="{{ p.detail.max_sell }}">Max Sell ({{ p.detail.max_sell }})</button>
+      </div>
+      <div class="trade-line">
+        <button type="button" class="btn btn-buy" data-action="panel.buy" data-args="{}" data-share-buy>Buy</button>
+        <button type="button" class="btn btn-sell" data-action="panel.sell" data-args="{}" data-share-sell>Sell</button>
+      </div>
+    </form>
+    {% endif %}
+
+    <div class="stack">
+      {{ ui.btn("View Trade History", "panel.history", cls="btn-wide") }}
+      {{ ui.close_btn("Back to Computer", "btn-wide") }}
+    </div>
+  </div>
+
+  <div class="market-right">
+    <div class="market-header">
+      <div>
+        <p>Cycle: {{ p.cycle }}</p>
+        <p style="color: {{ p.timer.color }}">{{ p.timer.text }}</p>
+        <p>Credits: {{ "%.2f"|format(p.credits) }}</p>
+      </div>
+      {% if p.detail %}
+      <div class="company-info">
+        <h2>{{ p.detail.name }}</h2>
+        <p>Current Price: {{ "%.2f"|format(p.detail.price) }}
+          <span style="color: {{ p.detail.change_color }}">Change: {{ "%.2f"|format(p.detail.change) }} ({{ "%.2f"|format(p.detail.change_pct) }}%)</span></p>
+        <p>Shares Owned: {{ p.detail.owned }} &nbsp; Total Value: {{ "%.2f"|format(p.detail.total_value) }}</p>
+      </div>
+      {% endif %}
+    </div>
+    {% if p.detail %}
+    {% set c = p.detail.chart %}
+    <svg class="price-chart" viewBox="0 0 {{ c.width }} {{ c.height }}" role="img" aria-label="{{ c.title }}">
+      <text x="{{ c.width / 2 }}" y="18" text-anchor="middle" class="chart-title">{{ c.title }}</text>
+      <rect x="{{ c.left }}" y="{{ c.top }}" width="{{ c.right - c.left }}" height="{{ c.bottom - c.top }}" class="chart-frame"/>
+      {% for tick in c.y_ticks %}
+      <text x="{{ c.left - 6 }}" y="{{ tick.y + 4 }}" text-anchor="end" class="chart-tick">{{ tick.label }}</text>
+      {% endfor %}
+      {% for tick in c.x_ticks %}
+      <text x="{{ tick.x }}" y="{{ c.bottom + 16 }}" text-anchor="middle" class="chart-tick">{{ tick.label }}</text>
+      {% endfor %}
+      <text x="{{ (c.left + c.right) / 2 }}" y="{{ c.height - 6 }}" text-anchor="middle" class="chart-axis">Cycles</text>
+      <text x="14" y="{{ (c.top + c.bottom) / 2 }}" text-anchor="middle" class="chart-axis" transform="rotate(-90 14 {{ (c.top + c.bottom) / 2 }})">Price</text>
+      <polyline points="{{ c.points }}" fill="none" stroke="{{ c.color }}" stroke-width="2"/>
+    </svg>
+    {% endif %}
+  </div>
+</div>

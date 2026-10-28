@@ -1,0 +1,16 @@
+{% import "game/_ui.html" as ui %}
+<h1 class="screen-title">{{ s.name }}</h1>
+<p class="screen-desc">{{ s.description }}</p>
+<p class="screen-coords">{{ s.coords }}</p>
+<div class="nav-grid">
+  {% for grid_row in s.grid %}
+    {% for cell in grid_row %}
+    <div class="nav-cell">{% if cell %}{{ ui.btn(cell.label, cell.action, cell.args, "btn-wide") }}{% endif %}</div>
+    {% endfor %}
+  {% endfor %}
+</div>
+<div class="stack">
+  {{ ui.btn("Character Sheet", "game.character_sheet", cls="btn-wide") }}
+  {{ ui.btn("Hands", "game.hands", cls="btn-wide") }}
+  {{ ui.btn("Save and Exit", "game.save_and_exit", cls="btn-wide") }}
+</div>

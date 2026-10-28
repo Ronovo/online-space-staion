@@ -1,0 +1,22 @@
+{% import "game/_ui.html" as ui %}
+<h2>Trade History</h2>
+<div class="text-block" data-scroll-key="trades">
+  {% if p.entries is none %}
+    <p>No trade history available.</p>
+  {% else %}
+    <p class="text-header">TRADE HISTORY</p>
+    {% for entry in p.entries %}
+      <p class="text-cycle">Cycle {{ entry.get("cycle", 0) }}:</p>
+      {% set trades = entry.get("trades", {}) %}
+      {% for side, side_label, color in (("bought", "BOUGHT", "green"), ("sold", "SOLD", "red")) %}
+        {% if trades.get(side) %}
+        <p class="indent" style="color: {{ color }}">{{ side_label }}:</p>
+        {% for company, data in trades[side].items() %}
+        <p class="indent-2">{{ company }}: {{ data.get("amount", 0) }} shares @ {{ "%.2f"|format(data.get("price", 0)) }} cr each = {{ "%.2f"|format(data.get("total", 0)) }} cr</p>
+        {% endfor %}
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  {% endif %}
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

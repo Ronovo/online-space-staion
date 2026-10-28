@@ -1,0 +1,15 @@
+{% import "game/_ui.html" as ui %}
+<h2>Basic Tools</h2>
+<p>Tools inside the set:</p>
+<div class="listbox short">
+  {% for name in p.contents %}
+    {{ ui.row(name, "panel.select", {"index": loop.index0}, loop.index0 == p.selected) }}
+  {% else %}
+    <div class="list-empty">(empty)</div>
+  {% endfor %}
+</div>
+<div class="button-row">
+  {{ ui.btn("Pull Out", "panel.pull_out") }}
+  {{ ui.btn("Put Back", "panel.put_back") }}
+  {{ ui.close_btn() }}
+</div>

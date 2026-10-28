@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Log In — Space Station Explorer{% endblock %}
+{% block content %}
+<section class="card auth-card">
+  <h1>Log In</h1>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username
+      <input type="text" name="username" value="{{ username }}" autocomplete="username" required autofocus>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button class="btn" type="submit">Log In</button>
+  </form>
+  <p class="muted">No account yet? <a href="{{ url_for('register') }}">Register</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,8 @@
+{% import "game/_ui.html" as ui %}
+<h2>{{ p.title }}</h2>
+<div class="stack">
+  {% for action in p.actions %}
+    {{ ui.btn(action.label, "panel.item_action", {"name": action.name}, "btn-wide") }}
+  {% endfor %}
+  {{ ui.close_btn("Cancel", "btn-wide") }}
+</div>

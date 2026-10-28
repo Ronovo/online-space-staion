@@ -1,0 +1,34 @@
+{% import "game/_ui.html" as ui %}
+<h1>Storage Locker</h1>
+<div class="two-columns">
+  <fieldset class="group">
+    <legend>Locker Items</legend>
+    <div class="card-list" data-scroll-key="locker">
+      {% for item in p.locker %}
+      <div class="item-card">
+        <div>
+          <div class="item-name">{{ item.label }}</div>
+          <div class="item-desc">{{ item.description }}</div>
+        </div>
+        {{ ui.btn("Take", "panel.take", {"index": loop.index0}, "btn-small") }}
+      </div>
+      {% else %}
+      <p>The storage locker is empty.</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <fieldset class="group">
+    <legend>Your Inventory</legend>
+    <div class="card-list" data-scroll-key="locker-inventory">
+      {% for item in p.inventory %}
+      <div class="item-card">
+        <div class="item-name"{% if not item.valid %} style="color: red"{% endif %}>{{ item.label }}</div>
+        {{ ui.btn("Store in Locker", "panel.store", {"index": loop.index0}, "btn-small") }}
+      </div>
+      {% else %}
+      <p>Your inventory is empty.</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+</div>
+<div class="button-row">{{ ui.close_btn(cls="btn-wide") }}</div>

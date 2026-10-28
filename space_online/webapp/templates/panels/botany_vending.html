@@ -1,0 +1,32 @@
+{% import "game/_ui.html" as ui %}
+<h2>Botany Vending Machine</h2>
+<p class="center">This machine dispenses seeds, liquids, and tools for the botany lab.</p>
+<div class="toggle-row center">
+  {% for kind, label in p.filters %}
+    {{ ui.btn(label, "panel.filter", {"kind": kind}, "btn-toggle" ~ (" active" if p.filter == kind else "")) }}
+  {% endfor %}
+</div>
+<div class="two-columns">
+  <fieldset class="group">
+    <legend>Available Items</legend>
+    <div class="card-list" data-scroll-key="vend-available">
+      {% for item in p.available %}
+      <div class="item-card botany">
+        <span class="item-name">{{ item.name }}</span>
+        {{ ui.btn("Get Item", "panel.get", {"item_id": item.id}, "btn-small") }}
+      </div>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <fieldset class="group">
+    <legend>Your Items</legend>
+    <div class="card-list" data-scroll-key="vend-owned">
+      {% for label in p.owned %}
+      <div class="item-card botany"><span class="item-name">{{ label }}</span></div>
+      {% else %}
+      <p>You don't have any botany items.</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

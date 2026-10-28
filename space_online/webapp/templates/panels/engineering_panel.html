@@ -1,0 +1,64 @@
+{% import "game/_ui.html" as ui %}
+<h2>Station Engineering Panel</h2>
+<p class="center">This panel controls the station's power systems and engineering functions.</p>
+
+<section class="eng-section">
+  <h3 style="color: #FFFF00">Main Battery Status</h3>
+  <div class="bar-line">
+    <div class="bar"><div class="bar-fill" style="width: {{ [[p.battery_level, 0]|max, 100]|min }}%; background: {{ p.battery_color }}"></div></div>
+    <b>{{ "%.1f"|format(p.battery_level) }}%</b>
+  </div>
+  <p>Status: {{ p.battery_status }}</p>
+  <p style="color: {{ '#00FF00' if p.solar else '#FF0000' }}">Solar Charging: {{ "ACTIVE" if p.solar else "INACTIVE" }}</p>
+</section>
+
+<section class="eng-section">
+  <h3 style="color: #00CCFF">Solar Panel Control</h3>
+  <p>Control the deployment and charging state of the station's solar array.</p>
+  <div class="button-row">
+    <button type="button" class="btn" data-action="panel.toggle_solar" data-args="{}" style="color: {{ '#00FF00' if p.solar else '#FF0000' }}">Solar Array: {{ "ACTIVE" if p.solar else "INACTIVE" }}</button>
+  </div>
+</section>
+
+<section class="eng-section">
+  <h3 style="color: #00CCFF">Station Power Systems</h3>
+  {% for system in p.systems %}
+  <div class="system-row">
+    <b>{{ system.name }}</b>
+    <span>
+      {% if system.battery %}<span style="color: {{ p.battery_icon_color }}">{{ p.battery_icon }}</span>{% endif %}
+      <span style="color: {{ '#00FF00' if system.online else '#FF0000' }}">{{ "Online" if system.online else "Offline" }}</span>
+    </span>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="eng-section">
+  <h3 style="color: #00CCFF">Advanced Power Controls</h3>
+  <p>Configure power distribution and manage system priority.</p>
+  <p class="italic" style="color: #FF9900">Warning: Setting systems to 0 may have harmful effects on the station's environment and crew.</p>
+  <p><b>System Power Priority</b></p>
+  <p class="italic muted">Higher settings increase power consumption. Setting systems to 0 turns them off completely.</p>
+  {% for system in p.systems %}
+  <div class="slider-row">
+    <label for="level-{{ system.key }}">{{ system.name }}</label>
+    <input id="level-{{ system.key }}" type="range" min="0" max="10" step="1" value="{{ system.value }}"
+           data-action="panel.set_level" data-args='{{ {"system": system.key}|tojson }}'>
+    <output for="level-{{ system.key }}">{{ system.value }}</output>
+    <span class="draw" style="color: {{ system.draw.color }}">{{ system.draw.text }}</span>
+  </div>
+  {% endfor %}
+
+  <p><b>Power Management Mode</b></p>
+  <div class="radio-list">
+    {% for label, mode in p.power_modes %}
+    <label class="radio">
+      <input type="radio" name="power_mode" value="{{ mode }}"{% if mode == p.power_mode %} checked{% endif %}
+             data-action="panel.set_power_mode" data-args='{{ {"mode": mode}|tojson }}'>
+      {{ label }}
+    </label>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="button-row">{{ ui.close_btn("Close Panel", "btn-wide") }}</div>

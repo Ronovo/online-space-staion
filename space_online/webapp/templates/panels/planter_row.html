@@ -1,0 +1,25 @@
+{% import "game/_ui.html" as ui %}
+<h2>Botany Lab Plants — Row {{ p.row_number }}</h2>
+<p class="center">You observe the plants growing in this hydroponic row.</p>
+<div class="planters">
+  {% for card in p.cards %}
+  <div class="planter-card">
+    <p class="planter-title" style="color: {{ 'lightgreen' if card.occupied else 'white' }}">{{ card.title }}</p>
+    <p style="color: {{ card.stage_color }}">{{ card.stage }}</p>
+    <p class="small" style="color: {{ card.time_color }}">{{ card.time }}</p>
+    <div class="buffs">
+      {% for label, color in card.buffs %}<span class="buff" style="color: {{ color }}">{{ label }}</span>{% endfor %}
+    </div>
+    <div class="planter-actions">
+      {% if card.can_harvest %}{{ ui.btn("Harvest", "panel.harvest", {"index": card.index}, "btn-small") }}{% endif %}
+      {% for hand in p.hand_buttons %}
+        {{ ui.btn(hand.label, "panel.use_hand", {"index": card.index, "side": hand.side}, "btn-small") }}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div class="button-row">
+  {{ ui.btn("Back", "panel.back") }}
+  {{ ui.btn("Hands", "panel.hands") }}
+</div>

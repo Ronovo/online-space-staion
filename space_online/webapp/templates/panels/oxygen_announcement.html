@@ -1,0 +1,7 @@
+{% import "game/_ui.html" as ui %}
+<div class="emergency">
+  <div class="emergency-icon">⚠️</div>
+  <h1>CRITICAL ALERT</h1>
+  <p class="emergency-body">{{ p.body }}</p>
+  {{ ui.btn("ACKNOWLEDGE", "panel.acknowledge", cls="btn-acknowledge") }}
+</div>

@@ -1,0 +1,8 @@
+{% import "game/_ui.html" as ui %}
+<p class="prompt">Equip the {{ p.item_name }} to which hand?</p>
+<div class="button-row">
+  {% for side, label in p.sides %}
+    {{ ui.btn(label, "panel.choose", {"side": side}) }}
+  {% endfor %}
+</div>
+<div class="button-row">{{ ui.close_btn("Cancel") }}</div>

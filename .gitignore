@@ -1,0 +1,13 @@
+# Accounts, characters and the generated session key
+instance/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Editors
+.idea/
+.vscode/

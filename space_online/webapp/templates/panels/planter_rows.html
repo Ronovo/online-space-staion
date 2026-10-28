@@ -1,0 +1,9 @@
+{% import "game/_ui.html" as ui %}
+<h2>Hydroponic Rows</h2>
+<p class="center">Select a row of planters to work with.</p>
+<div class="stack">
+  {% for row in p.rows %}
+    {{ ui.btn("Row " ~ (row + 1), "panel.choose_row", {"row": row}, "btn-wide") }}
+  {% endfor %}
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

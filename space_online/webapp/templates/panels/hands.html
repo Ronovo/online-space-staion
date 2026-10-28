@@ -1,0 +1,23 @@
+{% import "game/_ui.html" as ui %}
+<h2>Hands</h2>
+<div class="hands-list">
+  {% for hand in p.hands %}
+  <div class="hand-row">
+    <span>{{ hand.label }}: {{ hand.held or "Empty" }}</span>
+    {% if hand.held %}
+      {{ ui.btn("Unequip", "panel.unequip", {"side": hand.side}, "btn-small") }}
+    {% elif hand.can_equip %}
+      {{ ui.btn("Equip Left" if hand.side == "left" else "Equip Right", "panel.equip", {"side": hand.side}, "btn-small") }}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<h3>Equippable Items</h3>
+<div class="listbox" data-scroll-key="hands">
+  {% for item in p.item_rows %}
+    {{ ui.row(item.label, "panel.select", {"index": item.index}, item.index == p.selected) }}
+  {% else %}
+    <div class="list-empty">You have no equippable items.</div>
+  {% endfor %}
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

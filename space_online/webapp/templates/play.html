@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ initial_state.title }}{% endblock %}
+{% block content %}
+<div id="connection" class="connection hidden">Connection lost. Retrying…</div>
+<div class="game-window" id="screen" data-act-url="{{ url_for('act') }}" data-home-url="{{ url_for('home') }}">{{ screen_html|safe }}</div>
+
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-box">
+    <h3 id="modal-title"></h3>
+    <p id="modal-message"></p>
+    <div id="modal-buttons" class="button-row"></div>
+  </div>
+</div>
+<script id="initial-state" type="application/json">{{ initial_state|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

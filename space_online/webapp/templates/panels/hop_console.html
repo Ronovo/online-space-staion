@@ -1,0 +1,18 @@
+{% import "game/_ui.html" as ui %}
+<h2>Access Control</h2>
+<fieldset class="group">
+  <legend>Pending Requests</legend>
+  {% if p.request %}
+    <p class="result" style="color: cyan">{{ p.request }}</p>
+  {% else %}
+    <p class="result" style="color: gray">No pending requests.</p>
+  {% endif %}
+</fieldset>
+{{ ui.feedback(p.feedback) }}
+<div class="button-row">
+  {{ ui.close_btn() }}
+  {% if p.request %}
+    {{ ui.btn("Deny", "panel.deny") }}
+    {{ ui.btn("Approve", "panel.approve") }}
+  {% endif %}
+</div>

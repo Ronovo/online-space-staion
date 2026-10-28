@@ -1,0 +1,26 @@
+{% import "game/_ui.html" as ui %}
+<h2>Station Fabricator</h2>
+<div class="fabricator">
+  <fieldset class="group">
+    <legend>Categories</legend>
+    <div class="listbox short">
+      {% for name in p.categories %}
+        {{ ui.row(name, "panel.category", {"name": name}, name == p.category) }}
+      {% endfor %}
+    </div>
+  </fieldset>
+  <fieldset class="group grow">
+    <legend>Items</legend>
+    <div class="listbox short">
+      {% for name in p.item_names %}
+        {{ ui.row(name, "panel.select", {"index": loop.index0}, loop.index0 == p.selected) }}
+      {% endfor %}
+    </div>
+  </fieldset>
+</div>
+{{ ui.feedback(p.feedback) }}
+<div class="button-row">
+  {{ ui.btn("Create", "panel.create") }}
+  {{ ui.btn("Examine", "panel.examine") }}
+  {{ ui.close_btn() }}
+</div>

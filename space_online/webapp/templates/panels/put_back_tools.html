@@ -1,0 +1,11 @@
+{% import "game/_ui.html" as ui %}
+<h2>Select a tool to put back:</h2>
+<div class="listbox short">
+  {% for tool in p.tools %}
+    {{ ui.row(tool.label, "panel.select", {"index": tool.index}, tool.index == p.selected) }}
+  {% endfor %}
+</div>
+<div class="button-row">
+  {{ ui.btn("Put Back", "panel.confirm") }}
+  {{ ui.close_btn("Cancel") }}
+</div>

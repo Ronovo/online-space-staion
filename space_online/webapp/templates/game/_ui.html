@@ -1,0 +1,27 @@
+{% macro btn(label, action, args=None, cls="", disabled=False) -%}
+<button type="button" class="btn {{ cls }}" data-action="{{ action }}" data-args='{{ (args or {})|tojson }}'{% if disabled %} disabled{% endif %}>{{ label }}</button>
+{%- endmacro %}
+
+{% macro close_btn(label="Close", cls="") -%}
+{{ btn(label, "game.close_panel", cls=cls) }}
+{%- endmacro %}
+
+{% macro row(label, action, args, selected=False, cls="") -%}
+<button type="button" class="list-row{% if selected %} selected{% endif %} {{ cls }}" data-action="{{ action }}" data-args='{{ args|tojson }}'>{{ label }}</button>
+{%- endmacro %}
+
+{% macro feedback(fb) -%}
+<p class="feedback"{% if fb %} style="color: {{ fb.color }}"{% endif %}>{{ fb.text if fb else "" }}</p>
+{%- endmacro %}
+
+{% macro widgets(items) -%}
+{% for w in items %}
+  {% if w.kind == "button" %}
+    {{ btn(w.label, w.action, w.args, "btn-wide") }}
+  {% elif w.style == "title" %}
+    <h3 class="menu-title"{% if w.color %} style="color: {{ w.color }}"{% endif %}>{{ w.text }}</h3>
+  {% else %}
+    <p class="menu-text{% if w.style == 'italic' %} italic{% endif %}"{% if w.color %} style="color: {{ w.color }}"{% endif %}>{{ w.text }}</p>
+  {% endif %}
+{% endfor %}
+{%- endmacro %}

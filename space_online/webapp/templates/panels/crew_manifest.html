@@ -1,0 +1,15 @@
+{% import "game/_ui.html" as ui %}
+<h2>Station Crew Manifest</h2>
+<div class="text-block" data-scroll-key="manifest">
+  <p class="text-header">STATION CREW MANIFEST</p>
+  <p class="text-header">====================</p>
+  {% for dept in p.departments %}
+    <p class="text-department">{{ dept.name }}:</p>
+    {% for member in dept.members %}
+      <p class="{{ 'player-name' if member.is_player else 'npc-name' }}">{{ member.text }}</p>
+    {% else %}
+      <p>- (No personnel assigned)</p>
+    {% endfor %}
+  {% endfor %}
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

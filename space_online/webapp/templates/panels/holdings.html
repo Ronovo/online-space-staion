@@ -1,0 +1,10 @@
+{% import "game/_ui.html" as ui %}
+<h2>Stock Holdings</h2>
+<div class="listbox tall">
+  {% for company, shares in p.holdings %}
+    <div class="list-item">{{ company }}: {{ shares }} shares</div>
+  {% else %}
+    <div class="list-item">You don't own any company stocks.</div>
+  {% endfor %}
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

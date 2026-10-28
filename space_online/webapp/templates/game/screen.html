@@ -1,0 +1,11 @@
+{% if view.panel %}
+<section class="panel panel-{{ view.panel.type|replace('_', '-') }}">
+  {% with p = view.panel.ctx %}{% include "panels/" ~ view.panel.type ~ ".html" %}{% endwith %}
+</section>
+{% else %}
+{% with s = view.screen %}
+<section class="screen" style="--screen-bg: {{ s.style.bg }}; --screen-fg: {{ s.style.fg }};">
+  {% include "game/" ~ s.type ~ ".html" %}
+</section>
+{% endwith %}
+{% endif %}

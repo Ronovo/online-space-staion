@@ -1,0 +1,29 @@
+{% import "game/_ui.html" as ui %}
+<h2>Job Assignment</h2>
+<div class="two-columns">
+  <fieldset class="group">
+    <legend>Station NPCs</legend>
+    <div class="listbox" data-scroll-key="assign-crew">
+      {% for row in p.rows %}
+        {{ ui.row(row.label, "panel.select_member", {"index": row.index}, row.index == p.crew_index) }}
+      {% endfor %}
+    </div>
+  </fieldset>
+  <fieldset class="group">
+    <legend>Assignable Jobs</legend>
+    <div class="listbox" data-scroll-key="assign-jobs">
+      {% for job in p.jobs %}
+        {{ ui.row(job, "panel.select_job", {"job": job}, job == p.job) }}
+      {% endfor %}
+    </div>
+  </fieldset>
+</div>
+<fieldset class="group">
+  <legend>Result</legend>
+  <p class="result" style="color: {{ p.result.color }}">{{ p.result.text }}</p>
+</fieldset>
+{{ ui.feedback(p.feedback) }}
+<div class="button-row">
+  {{ ui.close_btn("Exit") }}
+  {{ ui.btn("Assign Role", "panel.assign") }}
+</div>

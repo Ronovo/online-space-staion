@@ -1,0 +1,28 @@
+{% import "game/_ui.html" as ui %}
+<div class="panel-header">
+  <h2>Crew Vitals Monitor</h2>
+  {{ ui.btn("Hide Details" if p.details else "Show Details", "panel.toggle_details", cls="btn-small") }}
+</div>
+<div class="vitals-list" data-scroll-key="vitals">
+  {% for member in p.crew %}
+  <div class="vitals-row{% if loop.index0 is odd %} alt{% endif %}">
+    <div class="vitals-compact">
+      <span class="{% if member.is_player %}player-name{% endif %}">{{ member.name }} ({{ member.job }})</span>
+      <span class="status-badge" style="background: {{ member.status_color }}">{{ member.status }}</span>
+    </div>
+    {% if p.details %}
+    <div class="vitals-detail">
+      <p class="detail-title">Limb Health:</p>
+      <div class="detail-grid">
+        {% for limb in member.limbs %}<span style="color: {{ limb.color }}">{{ limb.name }}: {{ limb.health }}%</span>{% endfor %}
+      </div>
+      <p class="detail-title">Other Damage:</p>
+      <div class="detail-grid">
+        {% for d in member.damage %}<span style="color: {{ d.color }}">{{ d.icon }} {{ d.name }}: {{ "%.1f"|format(d.value) }}%</span>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<div class="button-row">{{ ui.close_btn() }}</div>

@@ -1,0 +1,30 @@
+{% import "game/_ui.html" as ui %}
+<h2>Bartender's Recipe Book</h2>
+<div class="toggle-row">
+  {% for key, label in p.categories %}
+    {{ ui.btn(label, "panel.category", {"name": key}, "btn-small") }}
+  {% endfor %}
+</div>
+<div class="text-block" data-scroll-key="recipes">
+  <p class="text-header">{{ p.header }}</p>
+  <p class="text-header">------------------------</p>
+  {% for section in p.sections %}
+    {% if section.title %}<p class="text-category">{{ section.title }}</p>{% endif %}
+    {% for recipe in section.recipes %}
+    <div class="recipe">
+      <p class="recipe-name">{{ recipe.name }}:</p>
+      <p class="indent"><b>Ingredients:</b> <span class="ingredients">{{ recipe.ingredients }}</span></p>
+      <p class="indent"><b>Price:</b> {{ recipe.price }} credits</p>
+      <p class="indent"><b>Description:</b> {{ recipe.desc }}</p>
+    </div>
+    {% endfor %}
+  {% endfor %}
+  {% if p.empty_message %}<p>{{ p.empty_message }}</p>{% endif %}
+</div>
+<form class="search-row" data-action="panel.search">
+  <label for="recipe-search">Search:</label>
+  <input id="recipe-search" name="query" type="search" maxlength="100" value="{{ p.query }}">
+  <button type="submit" class="btn btn-small">Search</button>
+  {{ ui.btn("Ingredients List", "panel.ingredients", cls="btn-small") }}
+</form>
+<div class="button-row">{{ ui.close_btn() }}</div>

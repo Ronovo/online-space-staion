@@ -1,0 +1,16 @@
+{% import "game/_ui.html" as ui %}
+<h2>Issue Warrant/Fine</h2>
+<fieldset class="group">
+  <legend>Crew</legend>
+  <div class="listbox" data-scroll-key="warrant-crew">
+    {% for row in p.rows %}
+      {{ ui.row(row.label, "panel.select", {"index": row.index}, row.index == p.selected) }}
+    {% endfor %}
+  </div>
+</fieldset>
+<div class="button-row">
+  {{ ui.btn("Issue Warrant", "panel.issue_warrant") }}
+  {{ ui.btn("Issue Fine", "panel.issue_fine") }}
+  {{ ui.btn("Clear Warrant", "panel.clear_warrant") }}
+  {{ ui.close_btn("Exit") }}
+</div>
