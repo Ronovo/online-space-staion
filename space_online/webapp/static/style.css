@@ -35,8 +35,6 @@ a { color: var(--accent); }
   background: #0a0a0a;
 }
 .topbar-left { display: flex; align-items: center; gap: 16px; }
-.back { color: var(--muted); text-decoration: none; }
-.back:hover { color: var(--fg); }
 .brand { color: var(--fg); text-decoration: none; font-weight: bold; }
 .account { display: flex; align-items: center; gap: 10px; }
 .account form { margin: 0; }

@@ -104,26 +104,6 @@ docker run -d -p 5000:5000 -v space-online-data:/app/instance space-station-expl
 
 Set `SPACE_ONLINE_SECRET_KEY` with `-e` so logins survive the key file being lost.
 
-### Inside another site
-
-`space_online.webapp.create_app()` returns a normal WSGI app, so a larger Flask site can mount it under a
-path. Two settings make it fit there:
-
-- `SESSION_COOKIE_PATH`: keep the game's login cookie to its own path, e.g. `/games/space-online/`.
-- `BACK_LINK`: a `{"href", "label"}` pair shown as a back link at the top of every page.
-
-```python
-from werkzeug.middleware.dispatcher import DispatcherMiddleware
-from space_online.webapp import create_app as create_space_online
-
-app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
-    "/games/space-online": create_space_online({
-        "SESSION_COOKIE_PATH": "/games/space-online/",
-        "BACK_LINK": {"href": "/games", "label": "Games"},
-    }),
-})
-```
-
 ## Tests
 
 ```sh
@@ -131,7 +111,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The tests cover accounts, character creation, playing and saving, mounting under a path, and the core game
+The tests cover accounts, character creation, playing and saving, and the core game
 rules (jobs, door access, inventory).
 
 ## Project layout
