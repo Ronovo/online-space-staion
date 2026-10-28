@@ -1,0 +1,10 @@
+    <label>Security Question
+      <select name="question" required>
+        <option value="">Pick a question</option>
+        {% for q in questions %}<option{% if q == question %} selected{% endif %}>{{ q }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Answer
+      <input type="text" name="answer" maxlength="100" autocomplete="off" required>
+    </label>
+    <p class="muted">You need this answer to reset your password.</p>

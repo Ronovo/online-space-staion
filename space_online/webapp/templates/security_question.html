@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Security Question - Space Station Explorer{% endblock %}
+{% block content %}
+<section class="card auth-card">
+  <h1>Security Question</h1>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% include "_security_fields.html" %}
+    <button class="btn" type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

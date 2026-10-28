@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import secrets
+import time
 
 from flask import (
     Flask,
@@ -29,7 +30,7 @@ from space_online.game.character_methods.character_creation import (
 )
 from space_online.game.helper_methods.ui_panels import default_ui_state
 from space_online.game.main import SpaceStationGame
-from space_online.webapp import db
+from space_online.webapp import db, ronovo_sso, security_questions
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 MIN_PASSWORD_LENGTH = 6
@@ -102,6 +103,31 @@ def _run_game(user_id, action=None, args=None):
     return db.update_character(user_id, run)
 
 
+def _log_in(user_id, username):
+    session.clear()
+    session["user_id"] = user_id
+    session["username"] = username
+
+
+def _ronovo_user(account):
+    """The account tied to a Ronovo account, created on its first login and named after it. Its password is
+    random and never shown, so logging in with Ronovo is the only way in."""
+    user = db.get_user_by_ronovo(account["sub"])
+    base = account["username"] if USERNAME_PATTERN.match(account["username"]) else "player"
+    n = 1
+    while user is None:
+        name = base if n == 1 else f"{base[:32 - len(str(n))]}{n}"
+        # None when the name is taken, or when a second login for this Ronovo account got there first.
+        if db.create_user(name, generate_password_hash(secrets.token_urlsafe(32)), account["sub"]) is None:
+            n += 1
+        user = db.get_user_by_ronovo(account["sub"])
+    return user
+
+
+def _answer_hash(answer):
+    return generate_password_hash(security_questions.normalize_answer(answer))
+
+
 def _render_screen(view):
     html = render_template("game/screen.html", view=view)
     return html, hashlib.sha1(html.encode("utf-8")).hexdigest()[:16]
@@ -110,12 +136,21 @@ def _render_screen(view):
 def _register_routes(app):
     @app.context_processor
     def inject_globals():
-        return {"csrf_token": _csrf_token, "current_user": session.get("username")}
+        return {"csrf_token": _csrf_token, "current_user": session.get("username"), "ronovo": ronovo_sso.enabled()}
 
+    # The Ronovo callback is posted by the portfolio, so it carries no CSRF token. Its signed login token
+    # and the state cookie set by /sso/login are what prove it.
     @app.before_request
     def protect_posts():
-        if request.method == "POST":
+        if request.method == "POST" and request.endpoint != "sso_callback":
             _check_csrf()
+
+    def ronovo_login(account):
+        user = _ronovo_user(account)
+        _log_in(user["id"], user["username"])
+        return redirect(url_for("home" if db.character_summary(user["id"]) else "new_character"))
+
+    ronovo_sso.add_flask_routes(app, "space-online", ronovo_login)
 
     @app.route("/")
     @login_required
@@ -128,6 +163,8 @@ def _register_routes(app):
             username = request.form.get("username", "").strip()
             password = request.form.get("password", "")
             confirm = request.form.get("confirm_password", "")
+            question = request.form.get("question", "")
+            answer = request.form.get("answer", "")
             error = None
             if not USERNAME_PATTERN.match(username):
                 error = "Usernames are 3-32 characters: letters, numbers, dot, dash, or underscore."
@@ -136,17 +173,19 @@ def _register_routes(app):
             elif password != confirm:
                 error = "Passwords do not match."
             else:
+                error = security_questions.problem(question, answer)
+            if error is None:
                 user_id = db.create_user(username, generate_password_hash(password))
                 if user_id is None:
                     error = "That username is already taken."
                 else:
-                    session.clear()
-                    session["user_id"] = user_id
-                    session["username"] = username
+                    db.set_security_question(user_id, question, _answer_hash(answer))
+                    _log_in(user_id, username)
                     return redirect(url_for("new_character"))
             flash(error, "error")
-            return render_template("register.html", username=username)
-        return render_template("register.html", username="")
+            return render_template("register.html", username=username, question=question,
+                                   questions=security_questions.QUESTIONS)
+        return render_template("register.html", username="", question="", questions=security_questions.QUESTIONS)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -156,11 +195,58 @@ def _register_routes(app):
             if user is None or not check_password_hash(user["password_hash"], request.form.get("password", "")):
                 flash("Incorrect username or password.", "error")
                 return render_template("login.html", username=username)
-            session.clear()
-            session["user_id"] = user["id"]
-            session["username"] = user["username"]
+            _log_in(user["id"], user["username"])
+            # Accounts made before security questions set one straight after logging in.
+            if not user["security_answer_hash"]:
+                return redirect(url_for("security_question"))
             return redirect(url_for("home"))
         return render_template("login.html", username="")
+
+    @app.route("/security-question", methods=["GET", "POST"])
+    @login_required
+    def security_question():
+        question = request.form.get("question", "")
+        if request.method == "POST":
+            error = security_questions.problem(question, request.form.get("answer", ""))
+            if error is None:
+                db.set_security_question(session["user_id"], question, _answer_hash(request.form["answer"]))
+                return redirect(url_for("home"))
+            flash(error, "error")
+        return render_template("security_question.html", question=question, questions=security_questions.QUESTIONS)
+
+    # Two steps: the username brings up its security question, then the answer and a new password change it.
+    # Too many wrong answers lock resets for a while.
+    @app.route("/reset-password", methods=["GET", "POST"])
+    def reset_password():
+        username = request.form.get("username", "").strip()
+        if request.method == "GET" or not username:
+            return render_template("reset_password.html", username="", question=None)
+        user = db.get_reset_user(username)
+        question = user["security_question"] if user else security_questions.stand_in_question(
+            username, app.config["SECRET_KEY"].encode("utf-8"))
+        if "answer" in request.form:
+            password = request.form.get("password", "")
+            error = None
+            if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
+                error = f"Passwords must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters."
+            elif password != request.form.get("confirm_password", ""):
+                error = "Passwords do not match."
+            elif user and time.time() < user["reset_locked_until"]:
+                error = "Too many wrong answers. Try again in 15 minutes."
+            elif not user or not check_password_hash(
+                    user["security_answer_hash"], security_questions.normalize_answer(request.form["answer"])):
+                error = "That answer is wrong."
+                if user:
+                    failures = user["reset_failures"] + 1
+                    locked = failures >= security_questions.MAX_RESET_FAILURES
+                    db.set_reset_failures(user["id"], 0 if locked else failures,
+                                          time.time() + security_questions.RESET_LOCK_SECONDS if locked else 0)
+            else:
+                db.set_password(user["id"], generate_password_hash(password))
+                flash("Password changed. Log in with your new password.", "info")
+                return redirect(url_for("login"))
+            flash(error, "error")
+        return render_template("reset_password.html", username=username, question=question)
 
     @app.route("/logout", methods=["POST"])
     def logout():

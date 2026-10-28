@@ -5,7 +5,7 @@ accounts, where each account owns one character whose progress is saved on the s
 
 ## Core Features
 
-- **Accounts**: Register with a username and password; each account owns exactly one character
+- **Accounts**: Register with a username, a password and a security question; each account owns exactly one character. **Forgot password?** resets the password with the security answer, and five wrong answers lock resets for 15 minutes.
 - **Character System**: Create a character with unique jobs (Staff Assistant to Captain), each with special access and starting credits
 - **Station Navigation**: Explore a donut-shaped ring of hallways and department rooms with random events
 - **Inventory System**: Carry items, store them in your quarters locker, and examine, read, drop, or drink them
@@ -89,6 +89,12 @@ Open http://127.0.0.1:5000, register an account, and create your character.
 | `HOST` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` so other machines on your network can connect. |
 | `PORT` | `5000` | Port to listen on. |
 | `SPACE_ONLINE_SECRET_KEY` | generated | Session signing key. If unset, one is generated once into `instance/secret_key`. |
+
+With `RONOVO_SSO_URL` (the portfolio's address, such as `http://ronovo.lan`) and `RONOVO_SSO_PUBLIC_KEY`
+(printed by the portfolio's `python sso.py`) set, the login page offers **Log in with Ronovo**. The first Ronovo
+login creates an account named after the Ronovo username, with a number added if that name is taken, and
+every later Ronovo login from any device uses the same one. That account has no password of its own, so
+Ronovo is the only way into it. Without those two settings the app runs on its own.
 
 Accounts and characters are stored in `instance/space_online.sqlite3`, next to `run_server.py`. The
 `instance/` folder is the game's only data: back it up to keep your players, delete it to start fresh.

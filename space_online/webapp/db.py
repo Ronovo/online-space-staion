@@ -23,6 +23,14 @@ CREATE TABLE IF NOT EXISTS characters (
     updated_at TEXT NOT NULL
 );
 """
+# Added after the first release, so they are created on older databases as well
+USER_COLUMNS = {
+    "ronovo_sub": "TEXT",
+    "security_question": "TEXT",
+    "security_answer_hash": "TEXT",
+    "reset_failures": "INTEGER NOT NULL DEFAULT 0",
+    "reset_locked_until": "REAL NOT NULL DEFAULT 0",
+}
 
 
 def _now():
@@ -49,15 +57,20 @@ def init_db(app):
         db = get_db()
         db.execute("PRAGMA journal_mode = WAL")
         db.executescript(SCHEMA)
+        existing = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+        for column, kind in USER_COLUMNS.items():
+            if column not in existing:
+                db.execute(f"ALTER TABLE users ADD COLUMN {column} {kind}")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_ronovo_sub ON users (ronovo_sub)")
         close_db()
 
 
-def create_user(username, password_hash):
-    """Insert an account. Returns the new id, or None if the username is taken."""
+def create_user(username, password_hash, ronovo_sub=None):
+    """Insert an account. Returns the new id, or None if the username (or Ronovo account) is taken."""
     try:
         cursor = get_db().execute(
-            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username, password_hash, _now()),
+            "INSERT INTO users (username, password_hash, created_at, ronovo_sub) VALUES (?, ?, ?, ?)",
+            (username, password_hash, _now(), ronovo_sub),
         )
     except sqlite3.IntegrityError:
         return None
@@ -70,6 +83,34 @@ def get_user_by_name(username):
 
 def get_user(user_id):
     return get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def set_security_question(user_id, question, answer_hash):
+    get_db().execute("UPDATE users SET security_question = ?, security_answer_hash = ? WHERE id = ?",
+                     (question, answer_hash, user_id))
+
+
+def get_reset_user(username):
+    """An account that has a security question, with its reset bookkeeping, or None."""
+    return get_db().execute(
+        "SELECT * FROM users WHERE username = ? AND security_answer_hash IS NOT NULL", (username,)
+    ).fetchone()
+
+
+def set_reset_failures(user_id, failures, locked_until):
+    get_db().execute("UPDATE users SET reset_failures = ?, reset_locked_until = ? WHERE id = ?",
+                     (failures, locked_until, user_id))
+
+
+def set_password(user_id, password_hash):
+    get_db().execute(
+        "UPDATE users SET password_hash = ?, reset_failures = 0, reset_locked_until = 0 WHERE id = ?",
+        (password_hash, user_id),
+    )
+
+
+def get_user_by_ronovo(sub):
+    return get_db().execute("SELECT * FROM users WHERE ronovo_sub = ?", (sub,)).fetchone()
 
 
 def character_summary(user_id):

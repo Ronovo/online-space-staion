@@ -3,6 +3,9 @@
 {% block content %}
 <section class="card auth-card">
   <h1>Log In</h1>
+  {% if ronovo %}
+  <p><a class="btn" href="{{ url_for('sso_login') }}">Log In with Ronovo</a></p>
+  {% endif %}
   <form method="post" class="form-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username
@@ -14,5 +17,6 @@
     <button class="btn" type="submit">Log In</button>
   </form>
   <p class="muted">No account yet? <a href="{{ url_for('register') }}">Register</a></p>
+  <p class="muted"><a href="{{ url_for('reset_password') }}">Forgot password?</a></p>
 </section>
 {% endblock %}

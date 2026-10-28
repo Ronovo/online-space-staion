@@ -1,6 +1,7 @@
 import pytest
 
 from space_online.webapp import create_app
+from space_online.webapp.security_questions import QUESTIONS
 
 CSRF = "test-csrf-token"
 
@@ -43,8 +44,12 @@ def act(client, **payload):
     return client.post("/api/act", json=payload, headers={"X-CSRF-Token": CSRF})
 
 
+QUESTION = QUESTIONS[0]
+
+
 def register(client, username="pilot", password="hunter22"):
-    return post(client, "/register", username=username, password=password, confirm_password=password)
+    return post(client, "/register", username=username, password=password, confirm_password=password,
+                question=QUESTION, answer="rex")
 
 
 def create_character(client, name="Ada", department="Civilian", job="Staff Assistant"):
