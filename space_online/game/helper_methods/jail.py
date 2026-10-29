@@ -10,6 +10,7 @@ import random
 
 from space_online.game.maps import donut
 from space_online.game.helper_methods.door_control import can_control_door
+from space_online.game.helper_methods.game_clock import format_elapsed, get_elapsed_seconds
 from space_online.game.helper_methods.npc_movement import (
     has_post,
     location_for_post,
@@ -36,28 +37,27 @@ def security_hallway_location():
     return donut.location_from_tile(donut.SPECIAL_ROOM_HALLWAY[donut.SECURITY_KEY])
 
 
-def warrant_reason_text(member, default="No reason on file"):
-    reason = (member.get("warrant_reason") or "").strip()
-    return reason if reason else default
+def _reason_text(member, field):
+    return member[field].strip() or "No reason on file"
+
+
+def warrant_reason_text(member):
+    return _reason_text(member, "warrant_reason")
 
 
 def has_fine(member):
-    try:
-        return float(member.get("fine_amount", 0) or 0) > 0
-    except (TypeError, ValueError):
-        return False
+    return member["fine_amount"] > 0
 
 
-def _fine_amount_value(member):
-    try:
-        return max(0, float(member.get("fine_amount", 0) or 0))
-    except (TypeError, ValueError):
-        return 0.0
+def jailed_away_text(member, elapsed_seconds):
+    """What someone sees when they look for, or call, a crew member who is locked up."""
+    remaining = format_elapsed(jail_seconds_remaining(member, elapsed_seconds))
+    return f"{member.get('name', 'They')} is in jail and will be released in {remaining}."
 
 
-def _fine_reason_text(member, default="No reason on file"):
-    reason = (member.get("fine_reason") or "").strip()
-    return reason if reason else default
+def player_jail_text(player_data):
+    remaining = format_elapsed(jail_seconds_remaining(player_data, get_elapsed_seconds(player_data)))
+    return f"You are in jail. Time remaining: {remaining}."
 
 
 def _clear_fine(member):
@@ -78,29 +78,16 @@ def _jail_for_fine(
     refuse=False,
 ):
     """Arrest someone over an unpaid/refused fine. Returns 'jailed'."""
-    if refuse:
-        jail_message = (
-            f"{guard_name} demands your unpaid fine of {amount:.0f} credits "
-            f"({reason}), but you refuse to pay.\nYou are under arrest!"
-            if is_player
-            else (
-                f"{name} refuses to pay their {amount:.0f}-credit fine ({reason}), "
-                f"even though they have the credits.\n"
-                f"{guard_name} arrests them."
-            )
-        )
-        note = f"{name} was jailed for refusing to pay a {amount:.0f}-credit fine."
+    if is_player:
+        jail_message = (f"{guard_name} demands your unpaid fine of {amount:.0f} credits ({reason}), but you "
+                        + ("refuse to pay.\nYou are under arrest!" if refuse
+                           else "cannot pay.\nYou are under arrest for non-payment!"))
     else:
-        jail_message = (
-            f"{guard_name} demands your unpaid fine of {amount:.0f} credits "
-            f"({reason}), but you cannot pay.\nYou are under arrest for non-payment!"
-            if is_player
-            else (
-                f"{name} cannot pay their {amount:.0f}-credit fine ({reason}).\n"
-                f"{guard_name} arrests them for non-payment."
-            )
-        )
-        note = f"{name} was jailed for failing to pay a {amount:.0f}-credit fine."
+        jail_message = (f"{name} refuses to pay their {amount:.0f}-credit fine ({reason}), even though they have the "
+                        f"credits.\n{guard_name} arrests them." if refuse
+                        else f"{name} cannot pay their {amount:.0f}-credit fine ({reason}).\n"
+                             f"{guard_name} arrests them for non-payment.")
+    note = f"{name} was jailed for {'refusing' if refuse else 'failing'} to pay a {amount:.0f}-credit fine."
 
     arrest_member(
         member,
@@ -131,8 +118,8 @@ def resolve_fine_with_guard(
     if not has_fine(member) or is_jailed(member):
         return None
 
-    amount = _fine_amount_value(member)
-    reason = _fine_reason_text(member)
+    amount = member["fine_amount"]
+    reason = _reason_text(member, "fine_reason")
     name = member.get("name", "Someone")
     credits = float(member.get("credits", 0) or 0)
 
@@ -196,23 +183,6 @@ def jail_seconds_remaining(member, elapsed_seconds=0.0):
     return max(0, int(release_at - elapsed_seconds))
 
 
-def format_jail_time(seconds):
-    """Format remaining seconds as 'Xm Ys' (or 'Ys' if under a minute)."""
-    seconds = max(0, int(seconds))
-    minutes, secs = divmod(seconds, 60)
-    if minutes > 0:
-        return f"{minutes}m {secs}s"
-    return f"{secs}s"
-
-
-def member_location_key(member):
-    """Return 'x,y' location key for a crew member, or None."""
-    location = member.get("location") or {}
-    if "x" not in location or "y" not in location:
-        return None
-    return f"{location.get('x')},{location.get('y')}"
-
-
 def members_in_room(station_crew, room_key, *, exclude=None):
     """Return non-jailed NPCs whose location matches room_key."""
     found = []
@@ -221,7 +191,7 @@ def members_in_room(station_crew, room_key, *, exclude=None):
             continue
         if is_jailed(npc):
             continue
-        if member_location_key(npc) == room_key:
+        if donut.location_key(npc["location"]) == room_key:
             found.append(npc)
     return found
 
@@ -267,7 +237,7 @@ def arrest_member(
     if is_player:
         message = reason or (
             f"You have been arrested and sent to jail for "
-            f"{format_jail_time(DEFAULT_SENTENCE_SECONDS)}."
+            f"{format_elapsed(DEFAULT_SENTENCE_SECONDS)}."
         )
         game.handle_player_arrest(message, show_message=show_message)
     elif show_message and reason:
@@ -330,68 +300,27 @@ def list_prisoners(player_data, station_crew):
 
 
 def tick_jail_releases(game):
-    """Release anyone whose sentence has expired. Returns list of released names."""
-    from space_online.game.helper_methods.game_clock import get_elapsed_seconds
+    """Release anyone whose sentence has expired."""
+    elapsed_seconds = get_elapsed_seconds(game.player_data)
+    for member, is_player in list_prisoners(game.player_data, game.station_crew):
+        if jail_seconds_remaining(member, elapsed_seconds) <= 0:
+            release_member(member, is_player=is_player, game=game, show_message=is_player)
 
-    released = []
+
+def arrest_wanted_in_room(room_key, game, guard, elapsed_seconds):
+    """Arrest the wanted crew, and the player, a guard finds in room_key."""
     player_data = game.player_data
-    station_crew = game.station_crew
-    elapsed_seconds = get_elapsed_seconds(player_data)
-
-    if is_jailed(player_data) and jail_seconds_remaining(player_data, elapsed_seconds) <= 0:
-        release_member(player_data, is_player=True, game=game, show_message=True)
-        released.append(player_data.get("name", "You"))
-
-    for npc in station_crew:
-        if is_jailed(npc) and jail_seconds_remaining(npc, elapsed_seconds) <= 0:
-            name = npc.get("name", "A crew member")
-            release_member(npc, is_player=False, game=game, show_message=False)
-            released.append(name)
-
-    return released
-
-
-def arrest_wanted_in_room(room_key, player_data, station_crew, *, game, guard=None, elapsed_seconds=0.0):
-    """Arrest wanted NPCs (and player) currently in room_key. Returns arrest count."""
-    arrested = 0
-
-    for npc in members_in_room(station_crew, room_key, exclude=guard):
-        if npc.get("warrant", False) and not is_jailed(npc):
-            name = npc.get("name", "A crew member")
-            charge = warrant_reason_text(npc)
-            if arrest_member(
-                npc,
-                reason=(
-                    f"{name} was arrested by security and sent to jail.\n"
-                    f"Charge: {charge}"
-                ),
-                game=game,
-                is_player=False,
-                show_message=True,
-                elapsed_seconds=elapsed_seconds,
-            ):
-                arrested += 1
-
-    if (
-        player_data.get("warrant", False)
-        and not is_jailed(player_data)
-        and member_location_key(player_data) == room_key
-    ):
-        charge = warrant_reason_text(player_data)
-        if arrest_member(
-            player_data,
-            reason=(
-                "A security guard found you while you were wanted. You are under arrest!\n"
-                f"Charge: {charge}"
-            ),
-            game=game,
-            is_player=True,
-            show_message=True,
-            elapsed_seconds=elapsed_seconds,
-        ):
-            arrested += 1
-
-    return arrested
+    wanted = [(npc, False) for npc in members_in_room(game.station_crew, room_key, exclude=guard)]
+    if donut.location_key(player_data["location"]) == room_key:
+        wanted.append((player_data, True))
+    for member, is_player in wanted:
+        if not member.get("warrant") or is_jailed(member):
+            continue
+        charge = warrant_reason_text(member)
+        found = ("A security guard found you while you were wanted. You are under arrest!" if is_player
+                 else f"{member.get('name', 'A crew member')} was arrested by security and sent to jail.")
+        arrest_member(member, reason=f"{found}\nCharge: {charge}", game=game, is_player=is_player,
+                      show_message=True, elapsed_seconds=elapsed_seconds)
 
 
 _ARREST_PLACE_TEXT = {
@@ -447,7 +376,7 @@ def offer_player_arrest_choice(game, npc, *, place="hall"):
     if bribe_amount is not None:
         lines.append(
             f'{name} leans in and whispers, "Look the other way and I\'ll make it '
-            f'worth your while — {bribe_amount} credits."'
+            f'worth your while - {bribe_amount} credits."'
         )
     lines.append("\nWhat do you do?")
 
@@ -466,8 +395,6 @@ def offer_player_arrest_choice(game, npc, *, place="hall"):
 
 @choice_handler("resolve_arrest_choice")
 def resolve_player_arrest_choice(game, crew_index, choice, place, bribe_amount):
-    from space_online.game.helper_methods.game_clock import get_elapsed_seconds
-
     if not (0 <= crew_index < len(game.station_crew)):
         return
     npc = game.station_crew[crew_index]

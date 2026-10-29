@@ -31,7 +31,6 @@ class Company:
         self.current_value = starting_value
         self.previous_value = starting_value
         self.price_history = [starting_value]
-        self.owned_shares = 0
         
     def update_value(self):
         self.previous_value = self.current_value
@@ -77,13 +76,6 @@ def apply_companies_from_save(companies, company_data_list):
         company.price_history = company_data["price_history"]
 
 
-def sync_holdings_to_companies(companies, stock_holdings):
-    """Sync player stock holdings onto company owned_shares fields."""
-    holdings = stock_holdings or {}
-    for company in companies:
-        company.owned_shares = holdings.get(company.name, 0)
-
-
 def get_seconds_until_next_cycle(elapsed_seconds, interval=CYCLE_INTERVAL_SECONDS):
     """Calculate seconds remaining until the next market cycle, per the master timer."""
     return int(max(0, interval - (elapsed_seconds % interval)))
@@ -103,29 +95,21 @@ def round_credits(value):
     return round(value, 2)
 
 
+# The trade log keeps this many of the most recent cycles that had trades.
+MAX_TRADE_LOG_CYCLES = 50
+
+
 def record_trade(player_data, cycle, side, company_name, shares, price, total):
     """Append or merge a buy/sell entry in the current cycle trade log."""
-    if "stock_market" not in player_data:
-        player_data["stock_market"] = {}
-
-    if "trade_log" not in player_data["stock_market"]:
-        player_data["stock_market"]["trade_log"] = []
-
-    current_cycle_entry = None
-    for entry in player_data["stock_market"]["trade_log"]:
-        if entry.get("cycle") == cycle:
-            current_cycle_entry = entry
-            break
-
+    trade_log = player_data["stock_market"]["trade_log"]
+    current_cycle_entry = next((entry for entry in trade_log if entry["cycle"] == cycle), None)
     if not current_cycle_entry:
         current_cycle_entry = {
             "cycle": cycle,
             "trades": {"bought": {}, "sold": {}},
         }
-        player_data["stock_market"]["trade_log"].append(current_cycle_entry)
-
-    if side not in current_cycle_entry["trades"]:
-        current_cycle_entry["trades"][side] = {}
+        trade_log.append(current_cycle_entry)
+        del trade_log[:-MAX_TRADE_LOG_CYCLES]
 
     side_trades = current_cycle_entry["trades"][side]
     if company_name in side_trades:
@@ -158,12 +142,12 @@ def generate_market_tip(companies_data):
 class StockMarketEngine:
     """Owns live market state and master-timer-driven tick logic."""
 
-    def __init__(self, companies=None):
-        self.companies = companies if companies is not None else create_default_companies()
+    def __init__(self, companies):
+        self.companies = companies
         self.cycle_number = 1
 
     def tick_if_due(self, elapsed_seconds):
-        """Advance the market to match the master timer. Returns True if it changed.
+        """Advance the market to match the master timer.
 
         Cycles are scheduled purely off ``elapsed_seconds``: cycle N ends at
         ``N * CYCLE_INTERVAL_SECONDS``. Catches up fully (not just one cycle)
@@ -171,47 +155,29 @@ class StockMarketEngine:
         save that sat untouched for a while.
         """
         target_cycle = int(elapsed_seconds // CYCLE_INTERVAL_SECONDS) + 1
-        if target_cycle <= self.cycle_number:
-            return False
-
         while self.cycle_number < target_cycle:
             for company in self.companies:
                 company.update_value()
             self.cycle_number += 1
 
-        return True
-
     def sync_to_player_data(self, player_data):
         """Write current market state into player_data."""
-        if "stock_market" not in player_data:
-            player_data["stock_market"] = default_stock_market_state()
-
-        sync_holdings_to_companies(self.companies, player_data.get("stock_holdings"))
-
         player_data["stock_market"].update({
             "cycle_number": self.cycle_number,
             "companies": serialize_companies(self.companies),
         })
 
-        if "trade_log" not in player_data["stock_market"]:
-            player_data["stock_market"]["trade_log"] = []
-
     @classmethod
     def from_player_data(cls, player_data):
         """Build an engine from the market state saved on player_data."""
-        market_data = player_data.get("stock_market") or {}
-        engine = cls(hydrate_companies(market_data.get("companies")))
-        engine.cycle_number = market_data.get("cycle_number", 1)
-        sync_holdings_to_companies(engine.companies, player_data.get("stock_holdings"))
+        market_data = player_data["stock_market"]
+        engine = cls(hydrate_companies(market_data["companies"]))
+        engine.cycle_number = market_data["cycle_number"]
         return engine
 
 
 def hydrate_companies(companies):
-    """Return live Company objects from Company instances or serialized dicts."""
-    if not companies:
-        return create_default_companies()
-    if all(isinstance(company, Company) for company in companies):
-        return list(companies)
+    """Return live Company objects from their saved dicts."""
     live = create_default_companies(history_cycles=0)
     apply_companies_from_save(live, companies)
     return live
@@ -235,7 +201,7 @@ def _market_filters(state):
     return {group: state.get(group, options[0][0]) for group, _, options in FILTER_GROUPS}
 
 
-def _filtered_companies(companies, player_credits, filters):
+def _filtered_companies(companies, player_credits, holdings, filters):
     """Companies passing the affordability/ownership/trend filters, price-sorted."""
     listed = []
     for company in companies:
@@ -246,7 +212,7 @@ def _filtered_companies(companies, player_credits, filters):
             or (filters["filter"] == "Expensive" and not can_afford)
         )
 
-        is_owned = company.owned_shares > 0
+        is_owned = holdings.get(company.name, 0) > 0
         passes_ownership = (
             filters["ownership"] == "all"
             or (filters["ownership"] == "owned" and is_owned)
@@ -269,10 +235,8 @@ def _filtered_companies(companies, player_credits, filters):
 
 def _listed_and_selected(game, state):
     """Return (listed companies, selected company); selection falls back to the first row."""
-    sync_holdings_to_companies(game.market_engine.companies, game.player_data.get("stock_holdings"))
-    listed = _filtered_companies(
-        game.market_engine.companies, game.player_data["credits"], _market_filters(state)
-    )
+    listed = _filtered_companies(game.market_engine.companies, game.player_data["credits"],
+                                 game.player_data["stock_holdings"], _market_filters(state))
     selected = next((c for c in listed if c.name == state.get("selected")), None)
     if selected is None and listed:
         selected = listed[0]
@@ -332,16 +296,17 @@ def stock_market_panel(game, state):
     detail = None
     if selected is not None:
         price_change = selected.current_value - selected.previous_value
+        owned = game.player_data["stock_holdings"].get(selected.name, 0)
         detail = {
             "name": selected.name,
             "price": selected.current_value,
             "change": price_change,
             "change_pct": (price_change / selected.previous_value) * 100,
             "change_color": "green" if price_change >= 0 else "red",
-            "owned": selected.owned_shares,
-            "total_value": selected.owned_shares * selected.current_value,
+            "owned": owned,
+            "total_value": owned * selected.current_value,
             "max_buy": int(credits / selected.current_value),
-            "max_sell": selected.owned_shares,
+            "max_sell": owned,
             "chart": _price_chart(selected),
         }
 
@@ -383,68 +348,45 @@ def _requested_shares(game, args):
     return shares
 
 
-@panel_action("stock_market")
-def buy(game, state, args):
+def _trade(game, state, args, side):
+    """Buy or sell the requested shares of the selected company at today's price."""
     _, company = _listed_and_selected(game, state)
     shares = _requested_shares(game, args)
     if company is None or shares is None:
         return
 
     player_data = game.player_data
-    total_cost = shares * company.current_value
-    if total_cost > player_data["credits"]:
+    holdings = player_data["stock_holdings"]
+    total = shares * company.current_value
+    if side == "bought" and total > player_data["credits"]:
         game.alert("Transaction Failed", "Not enough credits for this purchase.", kind="error")
         return
+    if side == "sold" and shares > holdings.get(company.name, 0):
+        game.alert("Transaction Failed", "You don't own that many shares.", kind="error")
+        return
 
-    player_data["credits"] = round_credits(player_data["credits"] - total_cost)
-    holdings = player_data.setdefault("stock_holdings", {})
-    holdings[company.name] = holdings.get(company.name, 0) + shares
-    record_trade(
-        player_data, game.market_engine.cycle_number, "bought",
-        company.name, shares, company.current_value, total_cost,
-    )
-    game.add_note(
-        f"Bought {shares} shares of {company.name} "
-        f"at {company.current_value:.2f} cr/share (Total: {total_cost:.2f} cr)"
-    )
+    sign = 1 if side == "bought" else -1
+    player_data["credits"] = round_credits(player_data["credits"] - sign * total)
+    holdings[company.name] = holdings.get(company.name, 0) + sign * shares
+    if holdings[company.name] <= 0:
+        del holdings[company.name]
+    record_trade(player_data, game.market_engine.cycle_number, side, company.name, shares,
+                 company.current_value, total)
+    verb = side.title()
+    game.add_note(f"{verb} {shares} shares of {company.name} "
+                  f"at {company.current_value:.2f} cr/share (Total: {total:.2f} cr)")
     state["selected"] = company.name
-    game.alert(
-        "Transaction Complete",
-        f"Bought {shares} shares of {company.name} for {total_cost:.2f} credits.",
-    )
+    game.alert("Transaction Complete", f"{verb} {shares} shares of {company.name} for {total:.2f} credits.")
+
+
+@panel_action("stock_market")
+def buy(game, state, args):
+    _trade(game, state, args, "bought")
 
 
 @panel_action("stock_market")
 def sell(game, state, args):
-    _, company = _listed_and_selected(game, state)
-    shares = _requested_shares(game, args)
-    if company is None or shares is None:
-        return
-
-    player_data = game.player_data
-    holdings = player_data.setdefault("stock_holdings", {})
-    if shares > holdings.get(company.name, 0):
-        game.alert("Transaction Failed", "You don't own that many shares.", kind="error")
-        return
-
-    total_value = shares * company.current_value
-    player_data["credits"] = round_credits(player_data["credits"] + total_value)
-    holdings[company.name] -= shares
-    if holdings[company.name] <= 0:
-        del holdings[company.name]
-    record_trade(
-        player_data, game.market_engine.cycle_number, "sold",
-        company.name, shares, company.current_value, total_value,
-    )
-    game.add_note(
-        f"Sold {shares} shares of {company.name} "
-        f"at {company.current_value:.2f} cr/share (Total: {total_value:.2f} cr)"
-    )
-    state["selected"] = company.name
-    game.alert(
-        "Transaction Complete",
-        f"Sold {shares} shares of {company.name} for {total_value:.2f} credits.",
-    )
+    _trade(game, state, args, "sold")
 
 
 @panel_action("stock_market")
@@ -454,6 +396,6 @@ def history(game, state, args):
 
 @register_panel("trade_history", "Trade History")
 def trade_history_panel(game, state):
-    trade_log = (game.player_data.get("stock_market") or {}).get("trade_log")
+    trade_log = game.player_data["stock_market"].get("trade_log")
     return {"entries": list(reversed(trade_log)) if trade_log is not None else None}
 

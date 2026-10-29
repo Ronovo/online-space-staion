@@ -77,7 +77,7 @@ class Bar(SpecialRoomBase):
 
 
 def _drink_categories(player_data):
-    stock = player_data.setdefault("bar_mixed_stock", {})
+    stock = player_data["bar_mixed_stock"]
     basic_drinks = dict(DRINKS_MENU)
     mixed_drinks = {
         name: MIXED_DRINKS[name]
@@ -101,7 +101,7 @@ def _current_drinks(game, state):
 
 @register_panel("drink_menu", "Drink Menu")
 def drink_menu_panel(game, state):
-    stock = game.player_data.setdefault("bar_mixed_stock", {})
+    stock = game.player_data["bar_mixed_stock"]
     drinks = _current_drinks(game, state)
     rows = []
     for drink, details in drinks.items():
@@ -146,7 +146,7 @@ def order(game, state, args):
         game.alert("Selection Needed", "Please select a drink first")
         return
 
-    stock = player_data.setdefault("bar_mixed_stock", {})
+    stock = player_data["bar_mixed_stock"]
     if drink_name in MIXED_DRINKS and stock.get(drink_name, 0) <= 0:
         game.alert(
             "Out of Stock",
@@ -174,7 +174,7 @@ def order(game, state, args):
         "category": "Drink",
         "attributes": {
             "alcoholic": alcoholic,
-            "alcohol_content": drink_details.get("alcohol_content", 2 if alcoholic else 0),
+            "alcohol_content": drink_details.get("alcohol_content", 0),
         },
         "actions": ["examine", "drink", "drop"],
     })

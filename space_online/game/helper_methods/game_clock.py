@@ -21,16 +21,12 @@ def default_game_clock():
     }
 
 
-def get_game_clock(player_data):
-    return player_data["game_clock"]
-
-
 def advance(player_data):
     """Advance the master timer by the real time elapsed since the last call.
 
     Returns (elapsed_seconds, delta_seconds).
     """
-    clock = get_game_clock(player_data)
+    clock = player_data["game_clock"]
 
     now = time.time()
     delta_seconds = max(0.0, now - clock["last_real_time"])
@@ -41,11 +37,11 @@ def advance(player_data):
 
 
 def seconds_since_last_tick(player_data):
-    return time.time() - get_game_clock(player_data)["last_real_time"]
+    return time.time() - player_data["game_clock"]["last_real_time"]
 
 
 def get_elapsed_seconds(player_data):
-    return get_game_clock(player_data).get("elapsed_seconds", 0.0)
+    return player_data["game_clock"]["elapsed_seconds"]
 
 
 def format_elapsed(seconds):

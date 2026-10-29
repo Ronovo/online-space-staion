@@ -1,7 +1,11 @@
 """Hallway random-event catalog, trigger, and effect helpers."""
 
 import random
+from space_online.game.helper_methods.health_bands import DAMAGE_TYPES, change_limb, limb_label, reduce_damage
 
+from space_online.game.character_methods.character_creation import REQUESTABLE_JOBS
+from space_online.game.helper_methods.game_clock import get_elapsed_seconds
+from space_online.game.helper_methods.jail import arrest_member, is_jailed, warrant_reason_text
 from space_online.game.helper_methods.npc_movement import find_hall_passersby
 from space_online.game.helper_methods.stock_market import generate_market_tip
 from space_online.game.objects.botany_items import BOTANY_SEED_IDS
@@ -168,31 +172,18 @@ def _static_events(game):
     ]
 
 
-def _non_admin_jobs():
-    from space_online.game.character_methods.character_creation import JOBS
-
-    return [
-        job
-        for job, info in JOBS.items()
-        if info.get("department") != "Administration"
-    ]
-
-
 def build_job_event(game):
     """Build the single job-category event for the player's current role."""
-    job = game.player_data.get("job")
-    if not job:
-        return None
-
+    job = game.player_data["job"]
     if job == "Head of Personnel":
         if game.player_data.get("access_request"):
             return None
-        crew = getattr(game, "station_crew", None) or game.player_data.get("station_crew", [])
+        crew = game.station_crew
         candidates = [npc for npc in crew if npc.get("name") and not npc.get("in_jail")]
         if not candidates:
             return None
         npc = random.choice(candidates)
-        requested_job = random.choice(_non_admin_jobs())
+        requested_job = random.choice(REQUESTABLE_JOBS)
         requester = npc.get("name", "A crew member")
         desc = (
             f"{requester} ({npc.get('job', 'Crew')}) has submitted an access request "
@@ -236,39 +227,13 @@ def build_job_event(game):
         )
 
         def effect():
-            power = game.player_data.setdefault("station_power", {})
+            power = game.player_data["station_power"]
             power["solar_charging"] = False
             game.add_note("Solar arrays went offline and need to be restarted.")
 
         return {
             "type": "job",
             "title": "Solar Panels Offline",
-            "desc": desc,
-            "effect": effect,
-        }
-
-    if job == "Doctor":
-        desc = "Someone needs healing!"
-
-        def effect():
-            game.add_note("Job event: Someone needs healing! (stub)")
-
-        return {
-            "type": "job",
-            "title": "Someone Needs Healing!",
-            "desc": desc,
-            "effect": effect,
-        }
-
-    if job == "Bartender":
-        desc = "Someone requested a drink."
-
-        def effect():
-            game.add_note("Job event: Someone requested a drink. (stub)")
-
-        return {
-            "type": "job",
-            "title": "Drink Request",
             "desc": desc,
             "effect": effect,
         }
@@ -289,7 +254,7 @@ def build_job_event(game):
         }
 
     if job == "Security Guard":
-        crew = getattr(game, "station_crew", None) or game.player_data.get("station_crew", [])
+        crew = game.station_crew
         passersby = find_hall_passersby(game.player_data, crew)
         if passersby:
             culprit = random.choice(passersby)
@@ -331,7 +296,7 @@ def _events_by_category(game):
     """Group static events by type and attach the player's job event."""
     by_type = {category: [] for category in EVENT_CATEGORIES}
     for event in _static_events(game):
-        by_type.setdefault(event["type"], []).append(event)
+        by_type[event["type"]].append(event)
 
     job_event = build_job_event(game)
     if job_event is not None:
@@ -348,12 +313,6 @@ def trigger_random_event(game):
         return
 
     category = random.choice(available)
-    # If job was chosen but empty (should be rare), fall back to another category.
-    if category == "job" and not by_type["job"]:
-        fallback = [cat for cat in ("good", "neutral", "bad") if by_type.get(cat)]
-        if not fallback:
-            return
-        category = random.choice(fallback)
 
     event = random.choice(by_type[category])
 
@@ -410,24 +369,11 @@ def damage_random_limb(game, min_damage, max_damage):
 
 
 def damage_limb(game, limb, min_damage, max_damage):
-    if limb in game.player_data["limbs"]:
-        damage = random.randint(min_damage, max_damage)
-
-        original_health = game.player_data["limbs"][limb]
-        game.player_data["limbs"][limb] = max(0, original_health - damage)
-
-        limb_name = limb.replace("_", " ").title()
-
-        _report_effect(
-            game,
-            "Blunt Injury",
-            f"Your {limb_name} took {damage}% blunt damage and is now at {game.player_data['limbs'][limb]}%.",
-        )
-
-        game.add_note(
-            f"Suffered blunt damage to {limb_name}: Took {damage}% damage "
-            f"(from {original_health}% to {game.player_data['limbs'][limb]}%)"
-        )
+    damage = random.randint(min_damage, max_damage)
+    before, after = change_limb(game.player_data, limb, -damage)
+    limb_name = limb_label(limb)
+    _report_effect(game, "Blunt Injury", f"Your {limb_name} took {damage}% blunt damage and is now at {after}%.")
+    game.add_note(f"Suffered blunt damage to {limb_name}: Took {damage}% damage (from {before}% to {after}%)")
 
 
 def add_credits(game, amount):
@@ -449,22 +395,8 @@ def lose_credits(game, amount):
 
 def add_random_item(game):
     """Add a random item (using item definitions) to the player's inventory."""
-    available_item_ids = list(ALL_ITEMS.keys())
-
-    if not available_item_ids:
-        game.alert("Error", "No items defined to be found.", kind="warning")
-        return
-
-    item_id = random.choice(available_item_ids)
-
+    item_id = random.choice(list(ALL_ITEMS))
     item_def = get_item_definition(item_id)
-
-    if not item_def:
-        game.alert("Error", f"Could not find definition for random item ID: {item_id}", kind="error")
-        return
-
-    game.player_data.setdefault("inventory", [])
-
     add_to_inventory(game.player_data, item_def)
     item_name = item_def.get("name", "an item")
     _report_effect(
@@ -510,14 +442,8 @@ def station_announcement(game):
 
 
 def heal_limb(game, limb, min_heal, max_heal):
-    if limb not in game.player_data["limbs"]:
-        return
-
-    amount = random.randint(min_heal, max_heal)
-    original = game.player_data["limbs"][limb]
-    game.player_data["limbs"][limb] = min(100, original + amount)
-    new_health = game.player_data["limbs"][limb]
-    limb_name = limb.replace("_", " ").title()
+    original, new_health = change_limb(game.player_data, limb, random.randint(min_heal, max_heal))
+    limb_name = limb_label(limb)
     healed = new_health - original
 
     _report_effect(
@@ -531,11 +457,9 @@ def heal_limb(game, limb, min_heal, max_heal):
     )
 
 
-def heal_damage_type(game, damage_key, label, min_heal, max_heal):
-    amount = random.randint(min_heal, max_heal)
-    original = game.player_data["damage"].get(damage_key, 0)
-    game.player_data["damage"][damage_key] = max(0, original - amount)
-    new_value = game.player_data["damage"][damage_key]
+def heal_damage_type(game, damage_key, min_heal, max_heal):
+    original, new_value = reduce_damage(game.player_data, damage_key, random.randint(min_heal, max_heal))
+    label = damage_key.title()
     healed = original - new_value
 
     _report_effect(
@@ -554,13 +478,13 @@ def medical_bot_heal(game):
     """Heal one random damaged limb or damage type by 1-5%."""
     candidates = []
 
-    for limb, health in game.player_data.get("limbs", {}).items():
+    for limb, health in game.player_data["limbs"].items():
         if health < 100:
             candidates.append(("limb", limb))
 
-    for damage_key, label in (("burn", "Burn"), ("poison", "Poison"), ("oxygen", "Oxygen")):
-        if game.player_data.get("damage", {}).get(damage_key, 0) > 0:
-            candidates.append(("damage", damage_key, label))
+    for damage_key in DAMAGE_TYPES:
+        if game.player_data["damage"][damage_key] > 0:
+            candidates.append(("damage", damage_key))
 
     if not candidates:
         _report_effect(
@@ -574,7 +498,7 @@ def medical_bot_heal(game):
     if choice[0] == "limb":
         heal_limb(game, choice[1], 1, 5)
     else:
-        heal_damage_type(game, choice[1], choice[2], 1, 5)
+        heal_damage_type(game, choice[1], 1, 5)
 
 
 def bot_moves_by(game):
@@ -587,8 +511,6 @@ def bot_moves_by(game):
             "A maintenance bot rolls past, scrubbing the floor as it goes.",
         )
     elif bot == "security":
-        from space_online.game.helper_methods.jail import arrest_member, is_jailed
-
         if is_jailed(game.player_data):
             _report_effect(
                 game,
@@ -596,29 +518,17 @@ def bot_moves_by(game):
                 "A security bot rolls past your cell without stopping.",
             )
         elif game.player_data.get("warrant", False):
-            from space_online.game.helper_methods.jail import warrant_reason_text
-
-            charge = warrant_reason_text(game.player_data)
-            _report_effect(
-                game,
-                "Security Bot",
-                "A security bot locks onto you. You are wanted — you are under arrest!\n"
-                f"Charge: {charge}",
-            )
-            from space_online.game.helper_methods.game_clock import get_elapsed_seconds
-
+            message = ("A security bot locks onto you. You are wanted, and you are under arrest!\n"
+                       f"Charge: {warrant_reason_text(game.player_data)}")
+            _report_effect(game, "Security Bot", message)
             arrest_member(
                 game.player_data,
-                reason=(
-                    "A security bot locks onto you. You are wanted — you are under arrest!\n"
-                    f"Charge: {charge}"
-                ),
+                reason=message,
                 game=game,
                 is_player=True,
                 show_message=False,
                 elapsed_seconds=get_elapsed_seconds(game.player_data),
             )
-            game.add_note("Arrested by a security bot while wanted.")
         else:
             _report_effect(
                 game,
@@ -635,13 +545,7 @@ def bot_moves_by(game):
 
 
 def add_snack(game):
-    item_def = get_item_definition("snack")
-    if not item_def:
-        game.alert("Error", "Could not find definition for snack.", kind="error")
-        return
-
-    game.player_data.setdefault("inventory", [])
-    add_to_inventory(game.player_data, item_def)
+    add_to_inventory(game.player_data, get_item_definition("snack"))
     _report_effect(
         game,
         "Free Snack",

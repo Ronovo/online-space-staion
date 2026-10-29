@@ -34,6 +34,11 @@ def location_from_key(key):
 def location_from_tile(tile):
     return {"x": tile[0], "y": tile[1]}
 
+
+# How x and y change for a step in each direction, and where each direction's button sits in a 3x3 nav grid.
+DIRECTION_STEPS = {"north": (1, 0), "south": (-1, 0), "east": (0, 1), "west": (0, -1)}
+DIRECTION_GRID = {"north": (0, 1), "south": (2, 1), "east": (1, 2), "west": (1, 0)}
+
 # --- Ship map: every tile's name/description/lock state ---
 SHIP_MAP = {
     QUARTERS_KEY: {"name": "Quarters", "desc": "Your personal quarters on the station."},
@@ -60,12 +65,12 @@ SHIP_MAP = {
     "2,5": {"name": "East Section", "desc": "A hallway along the eastern side of the station."},
     "1,5": {"name": "East Section", "desc": "A hallway connecting back to the main hallways."},
 
-    BRIDGE_KEY: {"name": "Bridge", "desc": "The control center of the station. The door is unlocked.", "locked": False},
-    MEDBAY_KEY: {"name": "MedBay", "desc": "The medical facility of the station. The door is unlocked.", "locked": False},
-    SECURITY_KEY: {"name": "Security", "desc": "The security center of the station. The door is unlocked.", "locked": False},
-    ENGINEERING_KEY: {"name": "Engineering Bay", "desc": "The station's engineering and maintenance center. The door is unlocked.", "locked": False},
-    BAR_KEY: {"name": "Bar", "desc": "The station's social hub where crew members can relax and enjoy drinks. The door is unlocked.", "locked": False},
-    BOTANY_KEY: {"name": "Botany Lab", "desc": "The station's plant cultivation and research facility. The door is unlocked.", "locked": False},
+    BRIDGE_KEY: {"name": "Bridge", "locked": False},
+    MEDBAY_KEY: {"name": "MedBay", "locked": False},
+    SECURITY_KEY: {"name": "Security", "locked": False},
+    ENGINEERING_KEY: {"name": "Engineering Bay", "locked": False},
+    BAR_KEY: {"name": "Bar", "locked": False},
+    BOTANY_KEY: {"name": "Botany Lab", "locked": False},
 }
 
 # Which "x,y" tiles are special-room doors, and what the room is called.
@@ -90,94 +95,37 @@ SPECIAL_ROOM_HALLWAY = {
     QUARTERS_KEY: (0, 0),
 }
 
-# Hallway tiles that replace the default N/S/E/W grid with a room button + corridor dirs.
-HALLWAY_SPECIAL_NAV = (
-    {
-        "hallway": SPECIAL_ROOM_HALLWAY[BRIDGE_KEY],
-        "room_key": BRIDGE_KEY,
-        "label": "Bridge",
-        "room": "Bridge",
-        "room_grid": (0, 1),
-        "dirs": (("east", 1, 2), ("south", 2, 1)),
-        "check_available": True,
-    },
-    {
-        "hallway": SPECIAL_ROOM_HALLWAY[MEDBAY_KEY],
-        "room_key": MEDBAY_KEY,
-        "label": "MedBay",
-        "room": "MedBay",
-        "room_grid": (1, 2),
-        "dirs": (("north", 0, 1), ("west", 1, 0)),
-        "check_available": True,
-    },
-    {
-        "hallway": SPECIAL_ROOM_HALLWAY[SECURITY_KEY],
-        "room_key": SECURITY_KEY,
-        "label": "Security",
-        "room": "Security",
-        "room_grid": (0, 1),
-        "dirs": (("west", 1, 0), ("south", 2, 1)),
-        "check_available": False,
-    },
-    {
-        "hallway": SPECIAL_ROOM_HALLWAY[ENGINEERING_KEY],
-        "room_key": ENGINEERING_KEY,
-        "label": "Engineering Bay",
-        "room": "Engineering",
-        "room_grid": (0, 1),
-        "dirs": (("west", 1, 0), ("east", 1, 2)),
-        "check_available": False,
-    },
-    {
-        "hallway": SPECIAL_ROOM_HALLWAY[BAR_KEY],
-        "room_key": BAR_KEY,
-        "label": "Bar",
-        "room": "Bar",
-        "room_grid": (2, 1),
-        "dirs": (("west", 1, 0), ("east", 1, 2)),
-        "check_available": False,
-    },
-)
+# Each room's door button on the nav grid of the hallway tile in front of it: its label and (row, col). A door
+# always takes a grid cell whose direction is closed on that tile.
+ROOM_DOOR_BUTTONS = {
+    BRIDGE_KEY: ("Bridge", (0, 1)),
+    MEDBAY_KEY: ("MedBay", (1, 2)),
+    SECURITY_KEY: ("Security", (0, 1)),
+    ENGINEERING_KEY: ("Engineering Bay", (0, 1)),
+    BAR_KEY: ("Bar", (2, 1)),
+    BOTANY_KEY: ("Botany Lab", (1, 0)),
+    QUARTERS_KEY: ("Quarters", (3, 1)),
+}
+
+
+def hallway_neighbors(x, y):
+    """The hallway tiles one step from (x, y), by direction. Room doors are entered with a button, not walked to."""
+    neighbors = {}
+    for direction, (dx, dy) in DIRECTION_STEPS.items():
+        key = tile_key(x + dx, y + dy)
+        if key in SHIP_MAP and key not in SPECIAL_ROOM_TILES:
+            neighbors[direction] = (x + dx, y + dy)
+    return neighbors
 
 
 def get_available_directions(x, y):
-    """Return which of north/south/east/west lead to another tile on the ring.
-
-    This encodes the shape of the donut: a hollow square hallway loop running
-    along x == 0, x == 5, y == 0 and y == 5.
-    """
-    north = south = east = west = False
-
-    if y == 0 and x < 5:
-        north = True
-    if y == 0 and x > 0:
-        south = True
-
-    if x == 0 and y < 5:
-        east = True
-    if x == 0 and y > 0:
-        west = True
-
-    if x == 5 and y < 5:
-        east = True
-    if x == 5 and y > 0:
-        west = True
-
-    if y == 5 and x < 5:
-        north = True
-    if y == 5 and x > 0:
-        south = True
-
-    return {"north": north, "south": south, "east": east, "west": west}
+    """Which of north/south/east/west lead to another hallway tile."""
+    neighbors = hallway_neighbors(x, y)
+    return {direction: direction in neighbors for direction in DIRECTION_STEPS}
 
 
 # --- Text map rendering ---
 _CELL_WIDTH = 12
-
-
-def _cell_display_name(key):
-    """Return the label to print for a tile, or None if it's a plain hallway."""
-    return SPECIAL_ROOM_TILES.get(key)
 
 
 def render_map_text():
@@ -208,7 +156,7 @@ def render_map_text():
             if key not in SHIP_MAP:
                 cell = ""
             else:
-                room_name = _cell_display_name(key)
+                room_name = SPECIAL_ROOM_TILES.get(key)
                 cell = room_name if room_name else "-" * _CELL_WIDTH
             row_cells.append(cell.center(_CELL_WIDTH))
         lines.append("".join(row_cells).rstrip())

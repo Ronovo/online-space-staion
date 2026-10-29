@@ -1,5 +1,6 @@
 
 import copy
+from space_online.game.helper_methods.health_bands import DAMAGE_TYPES, LIMBS, change_limb, limb_label, reduce_damage
 import uuid
 
 from space_online.game.helper_methods.ui_panels import choice_handler, panel_action, register_panel
@@ -10,9 +11,7 @@ from space_online.game.objects.food import FOOD_ITEMS
 # Tool IDs that fit inside a Basic Tools set (one of each).
 BASIC_TOOLKIT_TOOL_IDS = ("wrench", "screwdriver", "wirecutters")
 NON_STACKABLE_ITEM_IDS = frozenset({"basic_tools"})
-MEDKIT_DAMAGE_TYPES = (("burn", "Burn"), ("poison", "Poison"), ("oxygen", "Oxygen"))
 
-# --- Define Book Content --- 
 WELCOME_GUIDE_CONTENT = """WELCOME TO SPACE STATION EXPLORER
 
 Welcome to your new home among the stars! This guide will help you get acquainted with life aboard our station.
@@ -32,9 +31,6 @@ We hope you enjoy your stay and contribute to our thriving community!
 # always matches the actual station layout.
 STATION_MAP_CONTENT = render_map_text()
 
-# --- Master Item Dictionary --- 
-# Contains the base definitions for all items in the game.
-# When an item is added to inventory, a copy of this definition should be used.
 ALL_ITEMS = {
     # --- Tools --- 
     "wrench": {
@@ -114,7 +110,6 @@ ALL_ITEMS = {
 ALL_ITEMS.update(FOOD_ITEMS)
 ALL_ITEMS.update(BOTANY_ITEMS)
 
-# --- Helper Functions ---
 DEFAULT_LOCKER_ITEM_IDS = [
     "welcome_guide",
     "station_map",
@@ -146,21 +141,14 @@ def get_item_definition(item_id):
 
 
 def item_quantity(item):
-    """Return quantity for an inventory entry (missing quantity counts as 1)."""
-    if not isinstance(item, dict):
-        return 1
-    qty = item.get("quantity", 1)
-    try:
-        qty = int(qty)
-    except (TypeError, ValueError):
-        qty = 1
-    return max(1, qty)
+    """Return quantity for an inventory entry. A held item, or one fresh from its definition, has none: it is 1."""
+    return item.get("quantity", 1)
 
 
 def inventory_item_count(player_data):
     """Total number of items in inventory, summing stack quantities."""
     total = 0
-    for item in player_data.get("inventory", []) or []:
+    for item in player_data["inventory"]:
         total += item_quantity(item)
     return total
 
@@ -172,7 +160,7 @@ def format_inventory_label(item):
 
 
 def _is_non_stackable(item):
-    """Container items must not stack — each has its own contents."""
+    """Container items must not stack - each has its own contents."""
     if item.get("id") in NON_STACKABLE_ITEM_IDS:
         return True
     attrs = item.get("attributes") or {}
@@ -184,12 +172,9 @@ def add_to_inventory(player_data, item):
 
     Returns the inventory entry that was updated or appended.
     """
-    inventory = player_data.setdefault("inventory", [])
-    if not isinstance(item, dict):
-        return None
-
+    inventory = player_data["inventory"]
     item_copy = dict(item)
-    if "attributes" in item and isinstance(item["attributes"], dict):
+    if "attributes" in item:
         item_copy["attributes"] = copy.deepcopy(item["attributes"])
     add_qty = item_quantity(item_copy)
     item_copy["quantity"] = add_qty
@@ -197,7 +182,7 @@ def add_to_inventory(player_data, item):
 
     if item_id and not _is_non_stackable(item_copy):
         for existing in inventory:
-            if isinstance(existing, dict) and existing.get("id") == item_id and not _is_non_stackable(existing):
+            if existing.get("id") == item_id and not _is_non_stackable(existing):
                 existing["quantity"] = item_quantity(existing) + add_qty
                 return existing
 
@@ -207,14 +192,11 @@ def add_to_inventory(player_data, item):
 
 def remove_one_from_inventory(player_data, index):
     """Remove one unit from inventory at index. Returns the removed unit dict or None."""
-    inventory = player_data.get("inventory", [])
+    inventory = player_data["inventory"]
     if not (0 <= index < len(inventory)):
         return None
 
     entry = inventory[index]
-    if not isinstance(entry, dict):
-        return None
-
     qty = item_quantity(entry)
     if qty > 1:
         entry["quantity"] = qty - 1
@@ -225,35 +207,25 @@ def remove_one_from_inventory(player_data, index):
     return inventory.pop(index)
 
 
-def build_default_locker_inventory(exclude_item_ids=None):
-    """Return default locker item dicts, optionally skipping IDs already held."""
-    exclude = exclude_item_ids or set()
-    items = []
-    for item_id in DEFAULT_LOCKER_ITEM_IDS:
-        if item_id in exclude:
-            continue
-        item_def = get_item_definition(item_id)
-        if item_def:
-            items.append(item_def)
-    return items
-
-
-def ensure_locker_inventory(player_data):
-    """Return the player's persistent locker inventory."""
-    return player_data["locker_inventory"]
+def build_default_locker_inventory():
+    return [get_item_definition(item_id) for item_id in DEFAULT_LOCKER_ITEM_IDS]
 
 
 HAND_SIDES = (("left", "Left Hand"), ("right", "Right Hand"))
 
 
+def _item_rows(game, keep=lambda item: True):
+    """The inventory rows a panel lists: index and label of each item keep() allows."""
+    return [{"index": index, "label": format_inventory_label(item)}
+            for index, item in enumerate(game.player_data["inventory"]) if keep(item)]
+
+
 def _item_at(game, index, item_id=None):
     """Inventory entry at index, or None if missing or no longer the expected item."""
-    inventory = game.player_data.setdefault("inventory", [])
+    inventory = game.player_data["inventory"]
     if index is None or not (0 <= index < len(inventory)):
         return None
     item = inventory[index]
-    if not isinstance(item, dict) or "name" not in item:
-        return None
     if item_id is not None and item.get("id") != item_id:
         return None
     return item
@@ -271,8 +243,13 @@ def _select_item(game, state, args, predicate=None):
         state["selected_id"] = item.get("id")
 
 
+USABLE_ITEM_IDS = ("medkit", "basic_tools")
+
+
 def _other_actions(item):
-    return [action for action in item.get("actions", []) if action != "examine"]
+    """The actions an item's menu offers: those with a handler, and Use only on items that have a use."""
+    return [action for action in item.get("actions", [])
+            if action in _ITEM_ACTION_HANDLERS and (action != "use" or item.get("id") in USABLE_ITEM_IDS)]
 
 
 def _is_equippable(item):
@@ -287,7 +264,7 @@ def _hand_rows(player_data):
         rows.append({
             "side": side,
             "label": label,
-            "held": held.get("name", "Item") if isinstance(held, dict) else None,
+            "held": held["name"] if held else None,
         })
     return rows
 
@@ -295,8 +272,8 @@ def _hand_rows(player_data):
 def _unequip(game, side):
     """Return a held item from hand back into inventory."""
     hands = game.player_data["hands"]
-    item = hands.get(side)
-    if not isinstance(item, dict):
+    item = hands[side]
+    if item is None:
         return
     add_to_inventory(game.player_data, item)
     hands[side] = None
@@ -333,14 +310,9 @@ def _equip_to_hand(game, index, item_id, side):
 @register_panel("inventory", "Inventory")
 def inventory_panel(game, state):
     selected = _selected_item(game, state)
-    items = [
-        {"index": index, "label": format_inventory_label(item)}
-        for index, item in enumerate(game.player_data.get("inventory", []) or [])
-        if isinstance(item, dict) and "name" in item
-    ]
     return {
         "hands": _hand_rows(game.player_data),
-        "item_rows": items,
+        "item_rows": _item_rows(game),
         "selected": state.get("selected") if selected else None,
         "can_examine": selected is not None,
         "can_act": selected is not None and bool(_other_actions(selected)),
@@ -350,11 +322,6 @@ def inventory_panel(game, state):
 @panel_action("inventory")
 def select(game, state, args):
     _select_item(game, state, args)
-
-
-@panel_action("inventory")
-def unequip(game, state, args):
-    _unequip(game, args["side"])
 
 
 @panel_action("inventory")
@@ -397,13 +364,9 @@ def item_actions_panel(game, state):
 def item_action(game, state, args):
     item = _item_at(game, state["index"], state["item_id"])
     name = args["name"]
-    if item is None or name not in item.get("actions", []):
+    if item is None or name not in _other_actions(item):
         return
-    handler = _ITEM_ACTION_HANDLERS.get(name)
-    if handler is None:
-        game.alert("WIP", f"Action '{name}' not yet implemented.")
-        return
-    handler(game, state, item)
+    _ITEM_ACTION_HANDLERS[name](game, state, item)
 
 
 def _read_item(game, state, item):
@@ -433,13 +396,12 @@ def _drink_item(game, state, item):
     item_name = item.get("name", "drink")
     attributes = item.get("attributes", {})
     alcoholic = attributes.get("alcoholic", False)
-    alcohol_content = attributes.get("alcohol_content", 2 if alcoholic else 0)
+    alcohol_content = attributes.get("alcohol_content", 0)
 
     remove_one_from_inventory(game.player_data, state["index"])
     game.close_panel("item_actions")
 
     if alcoholic:
-        game.player_data.setdefault("alcohol_percent", 0)
         game.player_data["alcohol_percent"] += alcohol_content
         alc = game.player_data["alcohol_percent"]
         game.add_note(f"Drank the {item_name}. Alcohol is now {alc:.1f}%.")
@@ -458,25 +420,20 @@ def _eat_item(game, state, item):
 
 
 def _use_item(game, state, item):
-    """Dispatch Use by item id (medkit heal, basic_tools container, else WIP)."""
-    item_id = item.get("id")
-    if item_id == "medkit":
+    """Use a medkit, or open a basic_tools container (the USABLE_ITEM_IDS)."""
+    if item["id"] == "medkit":
         _use_medkit(game, state)
-    elif item_id == "basic_tools":
+    else:
         uid = item.setdefault("uid", uuid.uuid4().hex)
         game.close_panel("item_actions")
         game.open_panel("basic_tools", uid=uid)
-    else:
-        game.alert("WIP", f"Action 'use' not yet implemented for {item.get('name', 'this item')}.")
 
 
 def _use_medkit(game, state):
     """Heal injured limbs (+10%) and positive burn/poison/oxygen (-10%); consume on success."""
-    limbs = game.player_data.setdefault("limbs", {})
-    damage = game.player_data.setdefault("damage", {})
-
-    injured_limbs = [limb for limb, health in limbs.items() if health < 100]
-    injured_damage = [key for key, _label in MEDKIT_DAMAGE_TYPES if damage.get(key, 0) > 0]
+    player_data = game.player_data
+    injured_limbs = [limb for limb in LIMBS if player_data["limbs"][limb] < 100]
+    injured_damage = [key for key in DAMAGE_TYPES if player_data["damage"][key] > 0]
 
     if not injured_limbs and not injured_damage:
         game.alert("Medkit", "You are already at full health. The medkit is not needed.")
@@ -484,17 +441,11 @@ def _use_medkit(game, state):
 
     summary_lines = []
     for limb in injured_limbs:
-        original = limbs[limb]
-        limbs[limb] = min(100, original + 10)
-        limb_name = limb.replace("_", " ").title()
-        summary_lines.append(f"{limb_name}: {original}% → {limbs[limb]}%")
-
-    for key, label in MEDKIT_DAMAGE_TYPES:
-        if key not in injured_damage:
-            continue
-        original = damage.get(key, 0)
-        damage[key] = max(0, original - 10)
-        summary_lines.append(f"{label}: {original}% → {damage[key]}%")
+        before, after = change_limb(player_data, limb, 10)
+        summary_lines.append(f"{limb_label(limb)}: {before}% → {after}%")
+    for key in injured_damage:
+        before, after = reduce_damage(player_data, key, 10)
+        summary_lines.append(f"{key.title()}: {before}% → {after}%")
 
     remove_one_from_inventory(game.player_data, state["index"])
     game.close_panel("item_actions")
@@ -556,11 +507,7 @@ def hands_panel(game, state):
         row["can_equip"] = row["held"] is None and selected is not None
     return {
         "hands": rows,
-        "item_rows": [
-            {"index": index, "label": format_inventory_label(item)}
-            for index, item in enumerate(game.player_data.get("inventory", []) or [])
-            if isinstance(item, dict) and _is_equippable(item)
-        ],
+        "item_rows": _item_rows(game, _is_equippable),
         "selected": state.get("selected") if selected else None,
     }
 
@@ -580,23 +527,22 @@ def hands_equip(game, state, args):
         state.pop("selected_id", None)
 
 
-@panel_action("hands", "unequip")
-def hands_unequip(game, state, args):
+@panel_action("inventory")
+@panel_action("hands")
+def unequip(game, state, args):
     _unequip(game, args["side"])
 
 
 def _find_toolkit(game, uid):
     """Return (index, item) of the Basic Tools set with this uid, or (None, None)."""
-    for index, item in enumerate(game.player_data.get("inventory", []) or []):
-        if isinstance(item, dict) and item.get("uid") == uid:
+    for index, item in enumerate(game.player_data["inventory"]):
+        if item.get("uid") == uid:
             return index, item
     return None, None
 
 
 def _tool_name(tool):
-    if isinstance(tool, dict):
-        return tool.get("name", tool.get("id", "Tool"))
-    return str(tool)
+    return tool["name"]
 
 
 @register_panel("basic_tools", "Basic Tools")
@@ -638,12 +584,11 @@ def pull_out(game, state, args):
 
 def _put_back_candidates(game, contents):
     """Inventory (index, item) tools that fit an empty slot in the set."""
-    present_ids = {tool.get("id") for tool in contents if isinstance(tool, dict) and tool.get("id")}
+    present_ids = {tool["id"] for tool in contents}
     return [
         (inv_idx, inv_item)
-        for inv_idx, inv_item in enumerate(game.player_data.get("inventory", []) or [])
-        if isinstance(inv_item, dict)
-        and inv_item.get("id") in BASIC_TOOLKIT_TOOL_IDS
+        for inv_idx, inv_item in enumerate(game.player_data["inventory"])
+        if inv_item.get("id") in BASIC_TOOLKIT_TOOL_IDS
         and inv_item.get("id") not in present_ids
     ]
 
@@ -692,7 +637,7 @@ def confirm(game, state, args):
 
     inv_idx, item_id = state["selected"], state.get("selected_id")
     candidate_indices = {idx for idx, _ in _put_back_candidates(game, contents)}
-    present_now = {tool.get("id") for tool in contents if isinstance(tool, dict) and tool.get("id")}
+    present_now = {tool["id"] for tool in contents}
     if item_id in present_now:
         game.alert("Put Back", "That tool slot is already filled.")
         game.close_panel("put_back_tools")

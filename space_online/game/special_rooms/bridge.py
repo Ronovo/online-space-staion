@@ -1,6 +1,6 @@
 import random
 
-from space_online.game.character_methods.character_creation import JOBS
+from space_online.game.character_methods.character_creation import JOBS, REQUESTABLE_JOBS
 from space_online.game.helper_methods.npc_movement import reassign_npc_post
 from space_online.game.helper_methods.ui_panels import (
     choice_handler,
@@ -21,7 +21,15 @@ from space_online.game.special_rooms.shared import (
 )
 from space_online.game.maps.donut import BRIDGE_KEY
 
-REQUESTABLE_JOBS = [job for job, info in JOBS.items() if info.get("department") != "Administration"]
+
+def pending_access_request(player_data):
+    """The access request waiting for the HoP, or None."""
+    request = player_data.get("access_request")
+    return request if request and request.get("requested_job") else None
+
+
+def _approved_suffix(solar_activated):
+    return " Solar arrays are now active." if solar_activated else ""
 
 
 class Bridge(SpecialRoomBase):
@@ -58,7 +66,6 @@ class Bridge(SpecialRoomBase):
                 button("Station Status", "room.show_station_status"),
                 button("Security Alerts", "room.security_alerts"),
                 button("Crew Manifest", "room.show_crew_manifest"),
-                button("Emergency Protocols", "room.emergency_protocols"),
                 button("Back to Bridge Menu", "room.set_mode", mode="menu"),
             ]
         if mode == "hop_station" and self.station_allowed(mode):
@@ -128,8 +135,8 @@ class Bridge(SpecialRoomBase):
         """Talk to HoP: resolve a pending access request with a 50/50 approve/deny."""
         if available_npc(self.game, "Head of Personnel") is None:
             return
-        request = self.player_data.get("access_request")
-        if not request or not request.get("requested_job"):
+        request = pending_access_request(self.player_data)
+        if request is None:
             self.game.alert(
                 "Head of Personnel",
                 "The HoP is busy. Use the Access Control terminal to put in a request.",
@@ -146,10 +153,8 @@ class Bridge(SpecialRoomBase):
                 self.game.alert("Head of Personnel", error)
             else:
                 now = f"{requester} is now {job}." if for_crew else f"You are now {job}."
-                message = f"The HoP approved {whose} request. {now}"
-                if solar_activated:
-                    message += " Solar arrays are now active."
-                self.game.alert("Head of Personnel", message)
+                self.game.alert("Head of Personnel",
+                                f"The HoP approved {whose} request. {now}{_approved_suffix(solar_activated)}")
         else:
             self.player_data.pop("access_request", None)
             self.game.alert("Head of Personnel", f"The HoP denied {whose} request for {job}.")
@@ -160,11 +165,10 @@ class Bridge(SpecialRoomBase):
 
     @room_action(station="captain_station")
     def security_alerts(self):
-        self.game.alert("Security Alerts", "No security alerts reported.")
-
-    @room_action(station="captain_station")
-    def emergency_protocols(self):
-        self.game.alert("Emergency Protocols", "Emergency protocols ready for activation if needed.")
+        wanted = [member.get("name", "Unknown") for member in [self.player_data] + self.game.station_crew
+                  if member.get("warrant") and not member.get("in_jail")]
+        self.game.alert("Security Alerts",
+                        f"Wanted crew at large: {', '.join(wanted)}." if wanted else "No security alerts reported.")
 
     @room_action
     def show_crew_manifest(self):
@@ -191,7 +195,7 @@ def _activate_solar_for_engineer(game, job):
     """Assigning an Engineer turns the solar array on. Returns True if it changed."""
     if job != "Engineer":
         return False
-    power = game.player_data.setdefault("station_power", {})
+    power = game.player_data["station_power"]
     if power.get("solar_charging"):
         return False
     power["solar_charging"] = True
@@ -208,8 +212,7 @@ def apply_access_request_job(game, job):
         player_data.pop("access_request", None)
         return False, False, "Your access request was invalid and has been cleared."
 
-    request = player_data.get("access_request") or {}
-    requester_name = request.get("requester_name")
+    requester_name = player_data.get("access_request", {}).get("requester_name")
 
     # NPC-submitted request (HoP job event): update that crew member.
     if requester_name and requester_name != player_data.get("name"):
@@ -268,11 +271,10 @@ def submit(game, state, args):
 
 @register_panel("hop_console", "Access Control")
 def hop_console_panel(game, state):
-    request = game.player_data.get("access_request")
-    has_request = bool(request and request.get("requested_job"))
+    request = pending_access_request(game.player_data)
     return {
         "request": (
-            f"{request.get('requester_name', 'Unknown')} → {request['requested_job']}" if has_request else None
+            f"{request.get('requester_name', 'Unknown')} → {request['requested_job']}" if request else None
         ),
         "feedback": current_feedback(state),
     }
@@ -280,8 +282,8 @@ def hop_console_panel(game, state):
 
 @panel_action("hop_console")
 def approve(game, state, args):
-    req = game.player_data.get("access_request")
-    if not req or not req.get("requested_job"):
+    req = pending_access_request(game.player_data)
+    if req is None:
         set_feedback(state, "No pending request to approve.", "orange", seconds=None)
         return
     job = req["requested_job"]
@@ -289,17 +291,15 @@ def approve(game, state, args):
     if not ok:
         set_feedback(state, error, "red", seconds=None)
         return
-    message = f"Approved. {req.get('requester_name', 'Crew')} is now {job}."
-    if solar_activated:
-        message += " Solar arrays are now active."
     game.close_panel("hop_console")
-    game.alert("Access Control", message)
+    game.alert("Access Control",
+               f"Approved. {req.get('requester_name', 'Crew')} is now {job}.{_approved_suffix(solar_activated)}")
 
 
 @panel_action("hop_console")
 def deny(game, state, args):
-    req = game.player_data.get("access_request")
-    if not req or not req.get("requested_job"):
+    req = pending_access_request(game.player_data)
+    if req is None:
         set_feedback(state, "No pending request to deny.", "orange", seconds=None)
         return
     game.player_data.pop("access_request", None)
@@ -344,7 +344,7 @@ def job_assignment_panel(game, state):
         if job:
             result = {"text": f"{member.get('name', 'Unknown')} → {job}", "color": state.get("result_color", "white")}
         else:
-            result = {"text": f"{member.get('name', 'Unknown')} — select a job.", "color": "cyan"}
+            result = {"text": f"{member.get('name', 'Unknown')} - select a job.", "color": "cyan"}
     elif job:
         result = {"text": f"Select an NPC for {job}.", "color": "cyan"}
     else:
@@ -373,9 +373,7 @@ def select_job(game, state, args):
         state["result_color"] = "white"
 
 
-def _station_has_other_captain(game, exclude_player=False):
-    if not exclude_player and game.player_data.get("job") == "Captain":
-        return True
+def _npc_captain_exists(game):
     return any(npc.get("job") == "Captain" for npc in game.station_crew)
 
 
@@ -407,7 +405,7 @@ def assign(game, state, args):
         crew_index == PLAYER_CREW_INDEX
         and member.get("job") == "Captain"
         and job != "Captain"
-        and not _station_has_other_captain(game, exclude_player=True)
+        and not _npc_captain_exists(game)
     ):
         game.ask(
             "Confirm Reassignment",

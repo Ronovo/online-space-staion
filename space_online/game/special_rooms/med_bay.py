@@ -1,8 +1,13 @@
 import math
 
+from space_online.game.helper_methods.alcohol_helper import (
+    ALCOHOL_DECAY_AMOUNT,
+    ALCOHOL_DECAY_SECONDS,
+    DOCTOR_SOBER_FLOOR,
+    sober_up_cost,
+)
 from space_online.game.helper_methods.oxygen_helper import DOCTOR_REQUIRED_FLOOR
-from space_online.game.helper_methods.alcohol_helper import DOCTOR_SOBER_FLOOR, sober_up_cost
-from space_online.game.helper_methods.health_bands import damage_band, health_band
+from space_online.game.helper_methods.health_bands import DAMAGE_TYPES, average_limb_health, damage_band, health_band, limb_label
 from space_online.game.helper_methods.station_status import crew_health_status
 from space_online.game.special_rooms.shared import (
     SpecialRoomBase,
@@ -21,13 +26,11 @@ COST_MULTIPLIERS = {
     "burn": 3,
 }
 
-NON_LIMB_DAMAGE_TYPES = ("burn", "poison", "oxygen")
-
 
 def assess_injuries(player_data):
     """Return limb/non-limb damage breakdown and treatment costs."""
-    limbs = player_data.get("limbs", {}) or {}
-    damage = player_data.get("damage", {}) or {}
+    limbs = player_data["limbs"]
+    damage = player_data["damage"]
 
     limb_details = []
     blunt_points = 0
@@ -35,7 +38,7 @@ def assess_injuries(player_data):
     critical_limbs = []
 
     for limb, health in limbs.items():
-        limb_name = limb.replace("_", " ").title()
+        limb_name = limb_label(limb)
         points = max(0, 100 - health)
         blunt_points += points
         status = health_band(health)[0]
@@ -52,7 +55,7 @@ def assess_injuries(player_data):
             critical_limbs.append(limb_name)
 
     non_limb = {}
-    for dtype in NON_LIMB_DAMAGE_TYPES:
+    for dtype in DAMAGE_TYPES:
         value = damage.get(dtype, 0) or 0
         non_limb[dtype] = {
             "value": value,
@@ -62,17 +65,12 @@ def assess_injuries(player_data):
         }
 
     blunt_cost = math.ceil(blunt_points * COST_MULTIPLIERS["blunt"]) if blunt_points > 0 else 0
-    burn_cost = non_limb["burn"]["cost"]
-    poison_cost = non_limb["poison"]["cost"]
-    oxygen_cost = non_limb["oxygen"]["cost"]
-    total_cost = blunt_cost + burn_cost + poison_cost + oxygen_cost
+    total_cost = blunt_cost + sum(info["cost"] for info in non_limb.values())
 
-    overall_limb_health = 0.0
-    if limbs:
-        overall_limb_health = (sum(limbs.values()) / (len(limbs) * 100)) * 100
+    overall_limb_health = average_limb_health(player_data)
 
     active_damage_types = [
-        dtype.title() for dtype in NON_LIMB_DAMAGE_TYPES if non_limb[dtype]["value"] > 0
+        dtype.title() for dtype in DAMAGE_TYPES if non_limb[dtype]["value"] > 0
     ]
 
     return {
@@ -85,9 +83,6 @@ def assess_injuries(player_data):
         "blunt_cost": blunt_cost,
         "non_limb": non_limb,
         "active_damage_types": active_damage_types,
-        "burn_cost": burn_cost,
-        "poison_cost": poison_cost,
-        "oxygen_cost": oxygen_cost,
         "total_cost": total_cost,
     }
 
@@ -100,7 +95,7 @@ def format_cost_breakdown(assessment):
             f"- Blunt: {assessment['blunt_points']:.0f} pts × {COST_MULTIPLIERS['blunt']} "
             f"= {assessment['blunt_cost']} credits"
         )
-    for dtype in NON_LIMB_DAMAGE_TYPES:
+    for dtype in DAMAGE_TYPES:
         info = assessment["non_limb"][dtype]
         if info["value"] > 0:
             lines.append(
@@ -125,7 +120,7 @@ def format_damage_sections(assessment):
         sections.append("Limb Status:\nNo limb health data available.")
 
     damage_lines = ["Other Damage:"]
-    for dtype in NON_LIMB_DAMAGE_TYPES:
+    for dtype in DAMAGE_TYPES:
         info = assessment["non_limb"][dtype]
         damage_lines.append(
             f"- {dtype.title()}: {info['value']:.1f}% ({info['status']})"
@@ -135,22 +130,15 @@ def format_damage_sections(assessment):
     return "\n\n".join(sections)
 
 
-def build_treatment_cost_block(assessment, alcohol=0):
-    """Shared cost totals and breakdown lines for health check / doctor dialogs."""
+def build_treatment_cost_block(assessment, alcohol):
+    """Cost totals and breakdown lines shared by the health check and doctor dialogs."""
     sober_cost = sober_up_cost(alcohol)
-    injury_cost = assessment["total_cost"]
-    total_cost = injury_cost + sober_cost
-    lines = ["Treatment Cost:"]
-    lines.extend(format_cost_breakdown(assessment))
+    total_cost = assessment["total_cost"] + sober_cost
+    lines = format_cost_breakdown(assessment)
     if sober_cost > 0:
         lines.append(f"- Sober up: {sober_cost} credits")
     lines.append(f"Total: {total_cost} credits")
-    return {
-        "injury_cost": injury_cost,
-        "sober_cost": sober_cost,
-        "total_cost": total_cost,
-        "lines": lines,
-    }
+    return {"sober_cost": sober_cost, "total_cost": total_cost, "lines": lines}
 
 
 def build_health_check_report(player_data):
@@ -158,8 +146,8 @@ def build_health_check_report(player_data):
     assessment = assess_injuries(player_data)
     overall_health = assessment["overall_limb_health"]
     has_non_limb = bool(assessment["active_damage_types"])
-    alcohol = player_data.get("alcohol_percent", 0) or 0
-    sober_cost = sober_up_cost(alcohol)
+    alcohol = player_data["alcohol_percent"]
+    cost = build_treatment_cost_block(assessment, alcohol)
 
     health_report = "Health Check Results:\n\n"
     if assessment["limbs"]:
@@ -172,12 +160,12 @@ def build_health_check_report(player_data):
             health_report += (
                 f"\n• Intoxication is at or above {DOCTOR_SOBER_FLOOR}%. "
                 f"Doctor treatment is required to sober up "
-                f"({sober_cost} credits)."
+                f"({cost['sober_cost']} credits)."
             )
         else:
             health_report += (
-                "\n• Alcohol will metabolize over time "
-                "(about 5% every 2 minutes)."
+                f"\n• Alcohol will metabolize over time "
+                f"(about {ALCOHOL_DECAY_AMOUNT}% every {ALCOHOL_DECAY_SECONDS // 60} minutes)."
             )
 
     needs_attention = overall_health < 60 or has_non_limb or alcohol >= DOCTOR_SOBER_FLOOR
@@ -223,14 +211,8 @@ def build_health_check_report(player_data):
         elif overall_health < 90 and assessment["limbs"]:
             health_report += "\n• Some physical activities may be difficult."
 
-    cost = build_treatment_cost_block(assessment, alcohol)
     if cost["total_cost"] > 0:
-        health_report += "\n\nEstimated Treatment Cost:"
-        for line in format_cost_breakdown(assessment):
-            health_report += f"\n{line}"
-        if cost["sober_cost"] > 0:
-            health_report += f"\n- Sober up: {cost['sober_cost']} credits"
-        health_report += f"\nTotal: {cost['total_cost']} credits"
+        health_report += "\n\nEstimated Treatment Cost:\n" + "\n".join(cost["lines"])
         health_report += "\n(Talk to Doctor to receive treatment)"
     else:
         health_report += "\n\nNo treatment needed."
@@ -241,13 +223,11 @@ def build_health_check_report(player_data):
 def build_doctor_exam_message(player_data):
     """Doctor dialog body + cost totals for treatment confirmation."""
     assessment = assess_injuries(player_data)
-    alcohol = player_data.get("alcohol_percent", 0) or 0
+    alcohol = player_data["alcohol_percent"]
     cost = build_treatment_cost_block(assessment, alcohol)
 
     if cost["total_cost"] == 0:
         return {
-            "assessment": assessment,
-            "alcohol": alcohol,
             **cost,
             "message": "The doctor examines you. 'You're in perfect health! No treatment needed.'",
             "needs_treatment": False,
@@ -257,11 +237,9 @@ def build_doctor_exam_message(player_data):
     message += format_damage_sections(assessment)
     if alcohol > 0:
         message += f"\n\nBlood Alcohol: {alcohol:.1f}%"
-    message += "\n\n" + "\n".join(cost["lines"])
+    message += "\n\nTreatment Cost:\n" + "\n".join(cost["lines"])
     message += "\n\nWould you like to proceed with treatment?"
     return {
-        "assessment": assessment,
-        "alcohol": alcohol,
         **cost,
         "message": message,
         "needs_treatment": True,
@@ -334,7 +312,7 @@ class MedBay(SpecialRoomBase):
 
         injury_details = []
         for limb, health in original_health.items():
-            limb_name = limb.replace("_", " ").title()
+            limb_name = limb_label(limb)
             healing_report += f"- {limb_name}: {health}% → 100%\n"
             if health < 100:
                 injury_details.append(f"{limb_name} ({health}% → 100%)")
@@ -370,21 +348,20 @@ def pay_for_healing(game):
 
     original_health = player_data["limbs"].copy()
     original_damage = player_data["damage"].copy()
-    original_alcohol = player_data.get("alcohol_percent", 0) or 0
+    original_alcohol = player_data["alcohol_percent"]
 
     for limb in player_data["limbs"]:
         player_data["limbs"][limb] = 100
     for damage_type in player_data["damage"]:
         player_data["damage"][damage_type] = 0
 
-    sobered = False
-    if sober_cost > 0:
+    sobered = sober_cost > 0
+    if sobered:
         player_data["alcohol_percent"] = 0
-        player_data.setdefault("damage_timers", {})["alcohol_decay_acc"] = 0.0
-        sobered = True
+        player_data["damage_timers"]["alcohol_decay_acc"] = 0.0
 
     injured_limbs = [
-        limb.replace("_", " ").title() for limb, health in original_health.items() if health < 100
+        limb_label(limb) for limb, health in original_health.items() if health < 100
     ]
     injured_damage = [dtype.title() for dtype, value in original_damage.items() if value > 0]
     has_injuries = bool(injured_limbs) or bool(injured_damage)
@@ -418,7 +395,6 @@ def pay_for_healing(game):
     game.add_note(note_text)
 
 
-VITALS_STATUS_COLORS = {"Healthy": "green", "Injured": "yellow", "Critical": "red"}
 VITALS_DAMAGE_ICONS = {"burn": "🔥", "poison": "☣️", "oxygen": "💨"}
 
 
@@ -426,7 +402,7 @@ VITALS_DAMAGE_ICONS = {"burn": "🔥", "poison": "☣️", "oxygen": "💨"}
 def crew_vitals_panel(game, state):
     crew = []
     for crew_member in [game.player_data] + game.station_crew:
-        status = crew_health_status(crew_member)
+        status, status_color = crew_health_status(crew_member)
         limbs = crew_member.get("limbs", {})
         damage = crew_member.get("damage", {})
         crew.append({
@@ -434,9 +410,9 @@ def crew_vitals_panel(game, state):
             "job": crew_member.get("job", "N/A"),
             "is_player": crew_member is game.player_data,
             "status": status,
-            "status_color": VITALS_STATUS_COLORS[status],
+            "status_color": status_color,
             "limbs": [
-                {"name": limb.replace("_", " ").title(), "health": health, "color": health_band(health)[1]}
+                {"name": limb_label(limb), "health": health, "color": health_band(health)[1]}
                 for limb, health in limbs.items()
             ],
             "damage": [

@@ -1,11 +1,10 @@
 from space_online.game.helper_methods.ui_panels import choice_handler, panel_action, register_panel
 from space_online.game.objects.items import (
     add_to_inventory,
-    ensure_locker_inventory,
     format_inventory_label,
     remove_one_from_inventory,
 )
-from space_online.game.special_rooms.shared import room_action, room_lighting_chrome
+from space_online.game.special_rooms.shared import SpecialRoomBase, room_action, room_lighting_chrome
 
 
 class Quarters:
@@ -28,10 +27,7 @@ class Quarters:
             "credits": self.player_data["credits"],
         }
 
-    def perform(self, name, args):
-        method = getattr(self, name, None)
-        if callable(method) and getattr(method, "room_action", False):
-            method(**args)
+    perform = SpecialRoomBase.perform
 
     @room_action
     def bed(self):
@@ -53,9 +49,6 @@ class Quarters:
     def door(self):
         self.game.leave_room()
 
-    @room_action
-    def save_and_exit(self):
-        self.game.save_and_exit()
 
 
 @choice_handler("save_game")
@@ -70,34 +63,31 @@ def storage_locker_panel(game, state):
         "locker": [
             {
                 "label": format_inventory_label(item),
-                "description": item.get("description", "") if isinstance(item, dict) else "",
+                "description": item.get("description", ""),
             }
-            for item in ensure_locker_inventory(game.player_data)
+            for item in game.player_data["locker_inventory"]
         ],
         "inventory": [
-            {"label": format_inventory_label(item), "valid": isinstance(item, dict) and "name" in item}
-            for item in game.player_data.get("inventory", [])
+            {"label": format_inventory_label(item)}
+            for item in game.player_data["inventory"]
         ],
     }
 
 
 def _item_note_name(item):
-    if isinstance(item, dict):
-        item_id = item.get("id")
-        return item.get("name", "Unknown Item") + (f" ({item_id})" if item_id else "")
-    return str(item)
+    return item["name"] + (f" ({item['id']})" if item.get("id") else "")
 
 
 @panel_action("storage_locker")
 def take(game, state, args):
-    locker_inventory = ensure_locker_inventory(game.player_data)
+    locker_inventory = game.player_data["locker_inventory"]
     locker_index = int(args["index"])
     if not (0 <= locker_index < len(locker_inventory)):
         game.alert("Error", "Invalid locker item.", kind="error")
         return
 
     taken_item = locker_inventory.pop(locker_index)
-    add_to_inventory(game.player_data, taken_item.copy() if isinstance(taken_item, dict) else taken_item)
+    add_to_inventory(game.player_data, taken_item)
     game.add_note(f"Took {_item_note_name(taken_item)} from locker.")
 
 
@@ -114,7 +104,7 @@ def store(game, state, args):
         game.alert("Error", "Could not store the item.", kind="error")
         return
 
-    ensure_locker_inventory(game.player_data).insert(0, removed.copy())
+    game.player_data["locker_inventory"].insert(0, removed.copy())
     game.add_note(f"Stored {note_name} in locker.")
 
 

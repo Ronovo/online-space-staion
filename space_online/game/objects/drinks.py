@@ -177,8 +177,8 @@ MIXED_DRINKS = {
     },
 }
 
-AVAILABLE_INGREDIENTS = [
-    "Vodka", "Gin", "Rum", "Whiskey", "Tequila", "Brandy", "Scotch",
+SPIRITS = ["Vodka", "Gin", "Rum", "Whiskey", "Tequila", "Brandy", "Scotch"]
+AVAILABLE_INGREDIENTS = SPIRITS + [
     "Orange Juice", "Cranberry Juice", "Pineapple Juice", "Tomato Juice",
     "Tonic Water", "Soda Water", "Water", "Cola", "Ginger Ale", "Sprite",
     "Lemon Juice", "Lime Juice", "Sugar", "Salt", "Honey",
@@ -190,7 +190,6 @@ AVAILABLE_INGREDIENTS = [
 
 BASIC_RECIPES = ["Screwdriver", "Gin and Tonic", "Rum and Cola", "Whiskey Sour", "Daiquiri"]
 SPECIAL_RECIPES = ["Space Blaster", "Quantum Fizz", "Nebula Cloud", "Solar Flare"]
-SPIRITS = ["Vodka", "Gin", "Rum", "Whiskey", "Tequila", "Brandy", "Scotch"]
 MODIFIERS = [
     "Lemon Juice", "Lime Juice", "Sugar", "Salt", "Honey", "Triple Sec",
     "Blue Curacao", "Orange Curacao", "Grenadine", "Bitters", "Vermouth",
@@ -206,28 +205,15 @@ def is_drink_alcoholic(name, details):
     return any(ing in SPIRITS for ing in details.get("ingredients", []))
 
 
-def _apply_alcohol_flags():
-    """Stamp alcohol metadata onto drink menu entries."""
-    for name, details in DRINKS_MENU.items():
-        details["alcoholic"] = is_drink_alcoholic(name, details)
-    for name, details in MIXED_DRINKS.items():
-        details["alcoholic"] = is_drink_alcoholic(name, details)
-        if details["alcoholic"] and "alcohol_content" not in details:
-            spirit_count = sum(ingredient in SPIRITS for ingredient in details["ingredients"])
-            details["alcohol_content"] = 3 if spirit_count > 1 else 2
-
-
-_apply_alcohol_flags()
+def _is_mixer(ingredient):
+    return any(word in ingredient for word in ("Juice", "Water", "Cola", "Ale", "Sprite"))
 
 
 def categorize_ingredients(ingredients=None):
     """Return (spirits, mixers, modifiers, specials) for the mixer UI."""
     ingredients = ingredients or AVAILABLE_INGREDIENTS
     spirits = [i for i in ingredients if i in SPIRITS]
-    mixers = [
-        i for i in ingredients
-        if "Juice" in i or "Water" in i or "Cola" in i or "Ale" in i or "Sprite" in i
-    ]
+    mixers = [i for i in ingredients if _is_mixer(i)]
     modifiers = [i for i in ingredients if i in MODIFIERS]
     specials = [i for i in ingredients if i not in spirits and i not in mixers and i not in modifiers]
     return spirits, mixers, modifiers, specials
@@ -244,7 +230,7 @@ def categorize_ingredients_exclusive(ingredients=None):
     for ingredient in ingredients:
         if ingredient in SPIRITS:
             spirits.append(ingredient)
-        elif "Juice" in ingredient or "Water" in ingredient or "Cola" in ingredient or "Ale" in ingredient or "Sprite" in ingredient:
+        elif _is_mixer(ingredient):
             mixers.append(ingredient)
         elif ingredient in MODIFIERS:
             modifiers.append(ingredient)
@@ -362,7 +348,7 @@ def mix(game, state, args):
 
     drink_match, drink_data = match_recipe(ingredients)
     if drink_match:
-        stock = game.player_data.setdefault("bar_mixed_stock", {})
+        stock = game.player_data["bar_mixed_stock"]
         stock[drink_match] = stock.get(drink_match, 0) + 1
         state["result"] = {
             "text": (

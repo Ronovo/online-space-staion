@@ -20,27 +20,15 @@ def battery_lighting_band(battery_level):
 def clamp_lighting_for_battery(station_power):
     """Clamp hallway_lighting into the battery band when the band changes.
 
-    Returns True if hallway_lighting was changed. Engineer overrides stick until
-    the next battery-band transition.
+    Engineer overrides stick until the next battery-band transition.
     """
-    if station_power is None:
-        return False
-
-    battery_level = station_power.get("battery_level", 100.0)
-    band = battery_lighting_band(battery_level)
-    last_band = station_power.get("last_lighting_battery_band")
-
-    if last_band == band:
-        return False
-
+    band = battery_lighting_band(station_power["battery_level"])
+    if station_power.get("last_lighting_battery_band") == band:
+        return
     low, high = LIGHTING_BANDS[band]
     levels = station_power["system_levels"]
-    current = int(levels.get("hallway_lighting", 5))
-    clamped = max(low, min(high, current))
-    changed = clamped != current
-    levels["hallway_lighting"] = clamped
+    levels["hallway_lighting"] = max(low, min(high, int(levels["hallway_lighting"])))
     station_power["last_lighting_battery_band"] = band
-    return changed
 
 
 def lighting_style(hallway_lighting, place="hallway"):

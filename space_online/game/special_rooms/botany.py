@@ -6,7 +6,10 @@ from space_online.game.objects.botany_items import (
     BOTANY_VEND_IDS,
     GROWTH_STAGES,
     MIRACLE_GROW_SPEED_BONUS,
+    PLANTERS_PER_ROW,
+    PLANTER_ROWS,
     PLENTIFUL_HARVEST_YIELD_MULTIPLIER,
+    empty_planter,
     growth_seconds_to_next_stage,
     growth_stage_label,
     refresh_planter_growth,
@@ -25,10 +28,6 @@ from space_online.game.special_rooms.shared import (
     text_line,
 )
 
-PLANTERS_PER_ROW = 4
-PLANTER_ROWS = 4
-TOTAL_PLANTERS = PLANTERS_PER_ROW * PLANTER_ROWS
-
 # Consumed from the hand on a single successful application.
 LIQUID_CONSUMABLE_IDS = {"miracle_grow", "plentiful_harvest", "the_ooze_mutagen"}
 
@@ -40,27 +39,6 @@ TOOL_GROWTH_CLASS_RULES = {
 }
 
 VEND_FILTERS = (("all", "All"), ("seed", "Seeds"), ("liquid", "Liquids"), ("tool", "Tools"))
-
-
-def _empty_planter():
-    return {
-        "occupied": False,
-        "plant": None,
-        "seed_id": None,
-        "produces": None,
-        "growth_class": None,
-        "planted_at_seconds": None,
-        "growth_stage": 0,
-        "dead": False,
-        "watered": False,
-        "miracle_grow": 0.0,
-        "yield_multiplier": 1,
-        "ooze_applied": False,
-    }
-
-
-def new_botany():
-    return {"planters": [_empty_planter() for _ in range(TOTAL_PLANTERS)]}
 
 
 class Botany(SpecialRoomBase):
@@ -156,7 +134,7 @@ def _planter_card(planter, index, elapsed_seconds, allow_harvest):
     card.update(
         stage=(
             f"Stage: {growth_stage_label(growth_stage)} ({growth_stage}/{GROWTH_STAGES})"
-            + (" — needs water" if needs_water else "")
+            + (" - needs water" if needs_water else "")
         ),
         stage_color="orange" if needs_water else "white",
     )
@@ -192,7 +170,7 @@ def planter_row_panel(game, state):
             })
 
     return {
-        "title": f"Viewing Plants — Row {row + 1}",
+        "title": f"Viewing Plants - Row {row + 1}",
         "row_number": row + 1,
         "cards": [
             _planter_card(planters[i], i, elapsed_seconds, allow_harvest)
@@ -246,7 +224,7 @@ def harvest(game, state, args):
     produce["quantity"] = yield_multiplier
     add_to_inventory(game.player_data, produce)
     plant_name = planter.get("plant") or produce.get("name", "produce")
-    game.player_data["botany"]["planters"][planter_index] = _empty_planter()
+    game.player_data["botany"]["planters"][planter_index] = empty_planter()
     game.add_note(
         f"Harvested {yield_multiplier}x {produce.get('name', plant_name)} from planter {planter_index + 1}."
     )
@@ -283,7 +261,7 @@ def use_hand(game, state, args):
 
         attrs = item.get("attributes") or {}
         planters[planter_index] = {
-            **_empty_planter(),
+            **empty_planter(),
             "occupied": True,
             "plant": attrs.get("plant_name") or item_name,
             "seed_id": item_id,
@@ -350,7 +328,7 @@ def use_hand(game, state, args):
 def clear_planter(game, index, item_name):
     planters = game.player_data["botany"]["planters"]
     if 0 <= index < len(planters):
-        planters[index] = _empty_planter()
+        planters[index] = empty_planter()
         game.add_note(f"Cleared planter {index + 1} with the {item_name}.")
 
 
@@ -371,7 +349,7 @@ def botany_vending_panel(game, state):
         "available": available,
         "owned": [
             format_inventory_label(item)
-            for item in game.player_data.get("inventory", []) or []
+            for item in game.player_data["inventory"]
             if isinstance(item, dict) and item.get("id") in BOTANY_VEND_IDS
         ],
     }

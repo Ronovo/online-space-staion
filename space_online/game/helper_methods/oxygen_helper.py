@@ -2,7 +2,6 @@
 
 from space_online.game.maps import donut
 
-# Tick / damage scale
 OXYGEN_TICK_SECONDS = 15
 BASE_DAMAGE_PER_TICK = 4
 DAMAGE_THRESHOLD_LEVEL = 4  # life support <= this applies damage
@@ -17,7 +16,6 @@ RECOVERY_SECONDS_PER_PERCENT = 30
 # oxygen damage actually starting, per the station-wide emergency announcement.
 OXYGEN_DEPLETION_GRACE_SECONDS = 15
 
-# Player warning messages (keyed by threshold %)
 OXYGEN_WARNING_MESSAGES = {
     30: "You're feeling light-headed and having difficulty breathing. Oxygen levels are dropping.",
     60: "Your vision is beginning to blur and you're experiencing severe difficulty breathing. Oxygen deprivation is worsening.",
@@ -33,7 +31,6 @@ OXYGEN_DEATH_NOTE = (
     "CRITICAL EVENT: Nearly died from oxygen deprivation. Emergency medical systems intervened."
 )
 
-# Engineering panel alerts
 LIFE_SUPPORT_DAMAGE_BEGIN_TITLE = "Life Support Warning"
 LIFE_SUPPORT_DAMAGE_BEGIN_MESSAGE = "Oxygen damage to crew will begin"
 
@@ -49,7 +46,7 @@ OXYGEN_DEPLETION_MODAL_BODY = (
 OXYGEN_DEPLETION_FOLLOWUP_TITLE = "CRITICAL SYSTEM ALERT"
 OXYGEN_DEPLETION_FOLLOWUP_MESSAGE = (
     "STATION ALERT: Life support systems have been deactivated!\n\n"
-    "Damage will begin in 15s unless life support is turned on."
+    f"Damage will begin in {OXYGEN_DEPLETION_GRACE_SECONDS}s unless life support is turned on."
 )
 
 
@@ -62,7 +59,7 @@ def oxygen_damage_for_tick(player_data, life_support_level, elapsed_seconds):
     if life_support_level > DAMAGE_THRESHOLD_LEVEL:
         return 0
     multiplier = 1 + 0.25 * (DAMAGE_THRESHOLD_LEVEL - life_support_level)
-    timers = player_data.setdefault("damage_timers", {})
+    timers = player_data["damage_timers"]
     damage = timers.get("oxygen_damage_acc", 0.0) + BASE_DAMAGE_PER_TICK * multiplier * max(
         elapsed_seconds / float(OXYGEN_TICK_SECONDS), 0)
     whole = int(damage)
@@ -72,7 +69,7 @@ def oxygen_damage_for_tick(player_data, life_support_level, elapsed_seconds):
 
 def advance_oxygen_recovery_accumulator(player_data, elapsed_seconds):
     """Advance the shared recovery accumulator; return whole % to apply this tick."""
-    timers = player_data.setdefault("damage_timers", {})
+    timers = player_data["damage_timers"]
     recovery_acc = timers.get("oxygen_recovery_acc", 0.0) + (
         elapsed_seconds / float(RECOVERY_SECONDS_PER_PERCENT)
     )
@@ -96,11 +93,7 @@ def _oxygen_depletion_grace_active(player_data, master_elapsed_seconds):
 
     Clears the timer once it expires so damage resumes normally afterward.
     """
-    if master_elapsed_seconds is None:
-        return False
-
-    timers = player_data.get("damage_timers") or {}
-    depletion = timers.get("oxygen_depletion")
+    depletion = player_data["damage_timers"].get("oxygen_depletion")
     if not depletion or not depletion.get("active"):
         return False
 
@@ -112,7 +105,7 @@ def _oxygen_depletion_grace_active(player_data, master_elapsed_seconds):
     return True
 
 
-def apply_oxygen_tick(player_data, station_crew, elapsed_seconds, master_elapsed_seconds=None):
+def apply_oxygen_tick(player_data, station_crew, elapsed_seconds, master_elapsed_seconds):
     """Apply oxygen damage or recovery for one master clock tick.
 
     ``elapsed_seconds`` is the real-time delta since the previous tick (used
@@ -121,14 +114,10 @@ def apply_oxygen_tick(player_data, station_crew, elapsed_seconds, master_elapsed
     period start/end.
 
     Mutates crew ``damage["oxygen"]``. Returns player-facing events for UI:
-    ``{"crossed_warnings": [...], "died": bool, "life_support_level": int}``.
+    ``{"crossed_warnings": [...], "died": bool}``.
     """
-    life_support_level = player_data["station_power"]["system_levels"].get("life_support", 10)
-    events = {
-        "crossed_warnings": [],
-        "died": False,
-        "life_support_level": life_support_level,
-    }
+    life_support_level = player_data["station_power"]["system_levels"]["life_support"]
+    events = {"crossed_warnings": [], "died": False}
 
     all_crew = [player_data] + list(station_crew)
     life_support_failing = life_support_level <= DAMAGE_THRESHOLD_LEVEL
@@ -150,9 +139,9 @@ def apply_oxygen_tick(player_data, station_crew, elapsed_seconds, master_elapsed
 
     for crew_member in all_crew:
         is_player = crew_member is player_data
-        current_oxygen_damage = int(crew_member["damage"].get("oxygen", 0))
+        current_oxygen_damage = int(crew_member["damage"]["oxygen"])
 
-        if apply_damage and oxygen_damage_rate > 0:
+        if apply_damage:
             new_oxygen_damage = min(DEATH_THRESHOLD, current_oxygen_damage + oxygen_damage_rate)
             crew_member["damage"]["oxygen"] = new_oxygen_damage
 

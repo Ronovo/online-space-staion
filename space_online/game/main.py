@@ -36,6 +36,7 @@ from space_online.game.helper_methods.game_clock import (
     get_elapsed_seconds,
 )
 from space_online.game.helper_methods.power_constants import (
+    BATTERY_CRITICAL,
     LOW_POWER_SYSTEM_LEVELS,
     HIGH_MODE_SOLAR_DRAIN,
     calculate_discharge,
@@ -223,12 +224,7 @@ class SpaceStationGame(PlayerMovementMixin):
         if now - clock.get("last_npc_move_real", 0.0) >= NPC_MOVE_INTERVAL_SECONDS - 0.05:
             clock["last_npc_move_real"] = now
             roll_departures(self.station_crew)
-            step_wanderers(
-                self.station_crew,
-                self.ship_map,
-                game=self,
-                player_data=self.player_data,
-            )
+            step_wanderers(self)
 
     def _tick_power(self, delta_seconds):
         """Discharge/charge the battery for the elapsed real-time delta."""
@@ -239,35 +235,28 @@ class SpaceStationGame(PlayerMovementMixin):
         solar_charging = power["solar_charging"]
         charge_rate = calculate_solar_charge(delta_seconds, solar_charging)
 
-        # Net change to battery level (power mode adjusts behavior when solar is on)
-        power_mode = power.get("power_mode", "balanced")
-        if solar_charging:
-            if power_mode == "high":
-                net_change = -(delta_seconds / 60) * HIGH_MODE_SOLAR_DRAIN
-            elif power_mode == "balanced":
-                net_change = 0
-            elif power_mode == "low":
-                net_change = charge_rate - total_discharge_rate
-            elif power_mode == "emergency":
-                low_discharge = calculate_discharge(LOW_POWER_SYSTEM_LEVELS, delta_seconds)
-                net_change = 1.5 * (charge_rate - low_discharge)
-            else:
-                net_change = charge_rate - total_discharge_rate
-        else:
-            net_change = charge_rate - total_discharge_rate
+        # With solar on, the power mode decides the net change; otherwise charge minus draw.
+        power_mode = power["power_mode"]
+        net_change = charge_rate - total_discharge_rate
+        if solar_charging and power_mode == "high":
+            net_change = -(delta_seconds / 60) * HIGH_MODE_SOLAR_DRAIN
+        elif solar_charging and power_mode == "balanced":
+            net_change = 0
+        elif solar_charging and power_mode == "emergency":
+            net_change = 1.5 * (charge_rate - calculate_discharge(LOW_POWER_SYSTEM_LEVELS, delta_seconds))
 
         old_level = power["battery_level"]
         new_level = max(0, min(100, old_level + net_change))
         power["battery_level"] = new_level
         clamp_lighting_for_battery(power)
 
-        if 0 < new_level <= 10 < old_level:
+        if 0 < new_level <= BATTERY_CRITICAL < old_level:
             self.report(
                 "Low Power Warning",
                 "Warning: Station battery power low. Emergency lighting active. Please activate solar panels.",
                 kind="warning",
             )
-        elif new_level <= 0:
+        elif new_level <= 0 < old_level:
             self.trigger_power_outage()
 
     def check_life_support_status(self, delta_seconds, elapsed_seconds):
@@ -283,8 +272,6 @@ class SpaceStationGame(PlayerMovementMixin):
             self.reset_view()
 
     def trigger_power_outage(self):
-        # Set battery to minimum level to prevent multiple outage triggers
-        self.player_data["station_power"]["battery_level"] = 0.1
         self.report(
             "Power Outage",
             "CRITICAL: Station power failure! Emergency systems active. Activate solar arrays immediately!",
@@ -315,27 +302,12 @@ class SpaceStationGame(PlayerMovementMixin):
 
     def _hallway_buttons(self, x, y):
         """(row, col, label, action, args) for the hallway nav grid at (x, y)."""
-        directions = donut.get_available_directions(x, y)
-        cells = []
-
-        special = next((e for e in donut.HALLWAY_SPECIAL_NAV if e["hallway"] == (x, y)), None)
-        if special is not None:
-            row, col = special["room_grid"]
-            cells.append((row, col, special["label"], "game.enter_room", {"room_key": special["room_key"]}))
-            for direction, row, col in special["dirs"]:
-                if special["check_available"] and not directions.get(direction):
-                    continue
-                cells.append((row, col, f"Go {direction.title()}", "game.move", {"direction": direction}))
-        else:
-            dir_grid = {"north": (0, 1), "south": (2, 1), "east": (1, 2), "west": (1, 0)}
-            for direction, (row, col) in dir_grid.items():
-                if directions.get(direction):
-                    cells.append((row, col, f"Go {direction.title()}", "game.move", {"direction": direction}))
-            if (x, y) == SPECIAL_ROOM_HALLWAY[donut.BOTANY_KEY]:
-                cells.append((1, 0, "Botany Lab", "game.enter_room", {"room_key": donut.BOTANY_KEY}))
-
-        if (x, y) == SPECIAL_ROOM_HALLWAY[donut.QUARTERS_KEY]:
-            cells.append((3, 1, "Quarters", "game.enter_room", {"room_key": donut.QUARTERS_KEY}))
+        cells = [(row, col, f"Go {direction.title()}", "game.move", {"direction": direction})
+                 for direction, (row, col) in donut.DIRECTION_GRID.items()
+                 if direction in donut.hallway_neighbors(x, y)]
+        for room_key, (label, (row, col)) in donut.ROOM_DOOR_BUTTONS.items():
+            if SPECIAL_ROOM_HALLWAY[room_key] == (x, y):
+                cells.append((row, col, label, "game.enter_room", {"room_key": room_key}))
         return cells
 
     def hallway_view(self):

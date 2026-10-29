@@ -1,8 +1,10 @@
 from space_online.game.objects.items import add_to_inventory, get_item_definition
 from space_online.game.helper_methods.power_constants import (
     BALANCED_SYSTEM_LEVELS,
+    BATTERY_BAND_COLORS,
     LOW_POWER_SYSTEM_LEVELS,
     SYSTEM_POWER_RATES,
+    battery_band,
 )
 from space_online.game.helper_methods.oxygen_helper import (
     LIFE_SUPPORT_DAMAGE_BEGIN_TITLE,
@@ -117,7 +119,7 @@ def has_engineering_access(player_data):
 
 
 def _fabricator_items(category):
-    return [item for item in (get_item_definition(i) for i in FABRICATABLE_ITEM_IDS.get(category, [])) if item]
+    return [get_item_definition(item_id) for item_id in FABRICATABLE_ITEM_IDS.get(category, [])]
 
 
 @register_panel("fabricator", "Fabricator")
@@ -186,6 +188,8 @@ def _power_draw(key, value):
 def engineering_panel(game, state):
     power = game.player_data["station_power"]
     battery_level = power["battery_level"]
+    band = battery_band(battery_level)
+    critical = band in ("outage", "critical")
     levels = power["system_levels"]
     systems = []
     for control in SYSTEM_CONTROLS:
@@ -198,14 +202,10 @@ def engineering_panel(game, state):
         })
     return {
         "battery_level": battery_level,
-        "battery_color": "#00FF00" if battery_level > 50 else "#FFFF00" if battery_level > 20 else "#FF0000",
-        "battery_status": (
-            "Normal operation" if battery_level > 50
-            else "Low power mode" if battery_level > 10
-            else "Critical power level"
-        ),
-        "battery_icon": "🔋" if battery_level > 10 else "⚠️",
-        "battery_icon_color": "#00FF00" if battery_level > 20 else "#FF0000",
+        "battery_color": BATTERY_BAND_COLORS[band],
+        "battery_status": {"normal": "Normal operation", "low": "Low power mode"}.get(band, "Critical power level"),
+        "battery_icon": "⚠️" if critical else "🔋",
+        "battery_icon_color": "#FF0000" if critical else "#00FF00",
         "solar": bool(power["solar_charging"]),
         "systems": systems,
         "power_modes": POWER_MODES,
@@ -235,7 +235,8 @@ def _update_system_level(game, system_key, value):
 
     if system_key == "life_support":
         if value == 0:
-            announce_oxygen_depletion(game)
+            if previous_value > 0:
+                announce_oxygen_depletion(game)
             return
         game.player_data.pop("announcements", None)
         game.ui["announcement_active"] = False
@@ -272,7 +273,7 @@ def announce_oxygen_depletion(game):
         "text": OXYGEN_DEPLETION_ANNOUNCEMENT_TEXT,
         "type": "emergency",
     })
-    game.player_data.setdefault("damage_timers", {})["oxygen_depletion"] = {
+    game.player_data["damage_timers"]["oxygen_depletion"] = {
         "active": True,
         "damage_starts_at_seconds": get_elapsed_seconds(game.player_data) + OXYGEN_DEPLETION_GRACE_SECONDS,
     }

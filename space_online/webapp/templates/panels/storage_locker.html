@@ -22,7 +22,7 @@
     <div class="card-list" data-scroll-key="locker-inventory">
       {% for item in p.inventory %}
       <div class="item-card">
-        <div class="item-name"{% if not item.valid %} style="color: red"{% endif %}>{{ item.label }}</div>
+        <div class="item-name">{{ item.label }}</div>
         {{ ui.btn("Store in Locker", "panel.store", {"index": loop.index0}, "btn-small") }}
       </div>
       {% else %}

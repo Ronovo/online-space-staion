@@ -38,7 +38,6 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 MIN_PASSWORD_LENGTH = 6
 MAX_PASSWORD_LENGTH = 128
 PORTFOLIO_CHOICE_SECONDS = 600
-_logins = LoginLimiter()
 
 
 def _load_secret_key(instance_path):
@@ -121,10 +120,10 @@ def _log_in(user):
     session["session_key"] = _session_key(user)
 
 
-def _login_error(username, user, password):
+def _login_error(logins, username, user, password):
     """Why this username and password can't log in, or None when they can. Wrong passwords count toward a lockout."""
     try:
-        if _logins.attempt(username, lambda: user is not None and check_password_hash(user["password_hash"], password)):
+        if logins.attempt(username, lambda: user is not None and check_password_hash(user["password_hash"], password)):
             return None
     except LockedOut as locked:
         return str(locked)
@@ -167,6 +166,8 @@ def _render_screen(view):
 
 
 def _register_routes(app):
+    logins = LoginLimiter()
+
     @app.context_processor
     def inject_globals():
         return {"csrf_token": _csrf_token, "current_user": session.get("username"), "portfolio": portfolio_sso.enabled(),
@@ -211,14 +212,13 @@ def _register_routes(app):
             return _enter(_portfolio_user(pending))
         if action == "link":
             user = db.get_user_by_name(username)
-            error = _login_error(username, user, request.form.get("password", ""))
+            error = _login_error(logins, username, user, request.form.get("password", ""))
             if error:
                 flash(error, "error")
             elif not db.link_portfolio(user["id"], pending["sub"]):
                 flash("That account is already linked to another portfolio account.", "error")
             else:
-                _log_in(user)
-                return redirect(url_for("home"))
+                return _enter(user)
         return render_template("link_account.html", name=pending["username"], username=username)
 
     @app.route("/")
@@ -255,32 +255,36 @@ def _register_routes(app):
         if request.method == "POST":
             username = request.form.get("username", "").strip()
             user = db.get_user_by_name(username)
-            error = _login_error(username, user, request.form.get("password", ""))
+            error = _login_error(logins, username, user, request.form.get("password", ""))
             if error:
                 flash(error, "error")
                 return render_template("login.html", username=username)
-            _log_in(user)
-            return redirect(url_for("home"))
+            return _enter(user)
         return render_template("login.html", username="")
 
     # Two steps: the username brings up its security question, then the answer and a new password change it.
-    # Too many wrong answers lock resets for a while.
+    # Too many wrong answers lock resets for a while. Usernames are public (registering says when one is taken),
+    # so the first step says plainly when there is no such account.
     @app.route("/reset-password", methods=["GET", "POST"])
     def reset_password():
         username = request.form.get("username", "").strip()
         if request.method == "GET" or not username:
             return render_template("reset_password.html", username="", question=None)
         user = db.get_reset_user(username)
-        question = user["security_question"] if user else security_questions.stand_in_question(
-            username, app.config["SECRET_KEY"].encode("utf-8"))
+        if user is None:
+            flash("That account logs in with the portfolio and has no security question."
+                  if db.get_user_by_name(username) else "There is no account with that username.", "error")
+            return render_template("reset_password.html", username="", question=None)
+        question = user["security_question"]
         if "answer" in request.form:
             password = request.form.get("password", "")
             error = _password_error(password, request.form.get("confirm_password", ""))
             if error is None:
-                tries = db.count_reset_try(user["id"], time.time()) if user else 0
+                tries = db.count_reset_try(user["id"], time.time())
                 if tries is None or tries > security_questions.MAX_RESET_FAILURES:
-                    error = "Too many wrong answers. Try again in 15 minutes."
-                elif not user or not check_password_hash(
+                    error = (f"Too many wrong answers. Try again in "
+                             f"{security_questions.RESET_LOCK_SECONDS // 60} minutes.")
+                elif not check_password_hash(
                         user["security_answer_hash"], security_questions.normalize_answer(request.form["answer"])):
                     error = "That answer is wrong."
                     if tries == security_questions.MAX_RESET_FAILURES:

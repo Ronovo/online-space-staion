@@ -1,13 +1,6 @@
 {% import "game/_ui.html" as ui %}
 <h2>Inventory</h2>
-<div class="hands-list">
-  {% for hand in p.hands %}
-  <div class="hand-row">
-    <span>{{ hand.label }}: {{ hand.held or "Empty" }}</span>
-    {% if hand.held %}{{ ui.btn("Unequip", "panel.unequip", {"side": hand.side}, "btn-small") }}{% endif %}
-  </div>
-  {% endfor %}
-</div>
+{{ ui.hand_rows(p.hands) }}
 <div class="listbox tall" data-scroll-key="inventory">
   {% for item in p.item_rows %}
     {{ ui.row(item.label, "panel.select", {"index": item.index}, item.index == p.selected) }}

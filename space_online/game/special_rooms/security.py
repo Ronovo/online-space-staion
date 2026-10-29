@@ -1,16 +1,14 @@
 from space_online.game.helper_methods.jail import (
     add_jail_time,
-    format_jail_time,
     has_fine,
     is_jailed,
     jail_seconds_remaining,
     list_prisoners,
     release_member,
     resolve_fine_with_guard,
-    security_hallway_location,
     warrant_reason_text,
 )
-from space_online.game.helper_methods.game_clock import get_elapsed_seconds
+from space_online.game.helper_methods.game_clock import format_elapsed, get_elapsed_seconds
 from space_online.game.helper_methods.ui_panels import panel_action, register_panel
 from space_online.game.special_rooms.shared import (
     PLAYER_CREW_INDEX,
@@ -103,11 +101,7 @@ def _warrant_row(member, is_player=False):
     name = member.get("name", "Unknown")
     job = member.get("job", "Unknown")
     wanted = " [WANTED]" if member.get("warrant", False) else ""
-    try:
-        fine_amt = float(member.get("fine_amount", 0) or 0)
-    except (TypeError, ValueError):
-        fine_amt = 0
-    fined = f" [FINE: {fine_amt:.0f}]" if fine_amt > 0 else ""
+    fined = f" [FINE: {member['fine_amount']:.0f}]" if has_fine(member) else ""
     you = " (YOU)" if is_player else ""
     return f"{name} ({job}){you}{wanted}{fined}"
 
@@ -141,13 +135,13 @@ def issue_warrant(game, state, args):
     if member.get("warrant", False):
         game.alert("Warrant", f"{member.get('name', 'That crew member')} already has an active warrant.")
         return
-    game.open_panel("warrant_reason", crew_index=state["selected"])
+    game.open_panel("charge", crew_index=state["selected"], kind="warrant")
 
 
 @panel_action("issue_warrant")
 def issue_fine(game, state, args):
     if _selected_member(game, state) is not None:
-        game.open_panel("fine_details", crew_index=state["selected"])
+        game.open_panel("charge", crew_index=state["selected"], kind="fine")
 
 
 @panel_action("issue_warrant")
@@ -163,45 +157,31 @@ def clear_warrant(game, state, args):
     game.alert("Warrant Cleared", f"Warrant cleared for {member.get('name', 'Unknown')}.")
 
 
-@register_panel("warrant_reason", "Warrant Reason")
-def warrant_reason_panel(game, state):
+@register_panel("charge", "Issue Warrant")
+def charge_panel(game, state):
+    """The reason form for a warrant, or the reason and amount form for a fine."""
     member = _member(game, state["crew_index"])
     if member is None:
         return None
-    return {"name": member.get("name", "Unknown"), "max_length": MAX_REASON_LENGTH}
+    fine = state["kind"] == "fine"
+    return {"title": "Issue Fine" if fine else "Issue Warrant", "fine": fine,
+            "name": member.get("name", "Unknown"), "max_length": MAX_REASON_LENGTH}
 
 
-@panel_action("warrant_reason", "confirm")
-def confirm_warrant(game, state, args):
-    member = _member(game, state["crew_index"])
-    reason = str(args.get("reason", "")).strip()[:MAX_REASON_LENGTH]
-    if member is None:
-        return
-    if not reason:
-        game.alert("Reason Required", "Enter a reason for the warrant.", kind="warning")
-        return
-    member["warrant"] = True
-    member["warrant_reason"] = reason
-    game.close_panel("warrant_reason")
-    game.alert("Warrant Issued", f"Warrant issued for {member.get('name', 'Unknown')}.\nReason: {reason}")
-
-
-@register_panel("fine_details", "Issue Fine")
-def fine_details_panel(game, state):
-    member = _member(game, state["crew_index"])
-    if member is None:
-        return None
-    return {"name": member.get("name", "Unknown"), "max_length": MAX_REASON_LENGTH}
-
-
-@panel_action("fine_details", "confirm")
-def confirm_fine(game, state, args):
+@panel_action("charge")
+def confirm(game, state, args):
     member = _member(game, state["crew_index"])
     if member is None:
         return
     reason = str(args.get("reason", "")).strip()[:MAX_REASON_LENGTH]
     if not reason:
-        game.alert("Reason Required", "Enter a reason for the fine.", kind="warning")
+        game.alert("Reason Required", f"Enter a reason for the {state['kind']}.", kind="warning")
+        return
+    if state["kind"] == "warrant":
+        member["warrant"] = True
+        member["warrant_reason"] = reason
+        game.close_panel("charge")
+        game.alert("Warrant Issued", f"Warrant issued for {member.get('name', 'Unknown')}.\nReason: {reason}")
         return
     try:
         amount = float(str(args.get("amount", "")).strip())
@@ -212,17 +192,14 @@ def confirm_fine(game, state, args):
         game.alert("Invalid Amount", "Fine amount must be greater than zero.", kind="warning")
         return
 
-    try:
-        existing = float(member.get("fine_amount", 0) or 0)
-    except (TypeError, ValueError):
-        existing = 0
+    existing = member["fine_amount"]
     member["fine_amount"] = existing + amount
     if existing > 0 and (member.get("fine_reason") or "").strip():
         member["fine_reason"] = f"{member.get('fine_reason').strip()}; {reason}"
     else:
         member["fine_reason"] = reason
 
-    game.close_panel("fine_details")
+    game.close_panel("charge")
     game.alert(
         "Fine Issued",
         f"Fine issued for {member.get('name', 'Unknown')}.\n"
@@ -236,12 +213,12 @@ def jail_panel(game, state):
     elapsed_seconds = get_elapsed_seconds(game.player_data)
     rows = []
     for member, is_player in list_prisoners(game.player_data, game.station_crew):
-        remaining = format_jail_time(jail_seconds_remaining(member, elapsed_seconds))
+        remaining = format_elapsed(jail_seconds_remaining(member, elapsed_seconds))
         you = " (YOU)" if is_player else ""
         rows.append({
             "index": PLAYER_CREW_INDEX if is_player else game.station_crew.index(member),
             "label": (
-                f"{member.get('name', 'Unknown')} ({member.get('job', 'Unknown')}){you} — "
+                f"{member.get('name', 'Unknown')} ({member.get('job', 'Unknown')}){you} - "
                 f"{remaining} remaining | Charge: {warrant_reason_text(member)}"
             ),
         })
@@ -274,7 +251,6 @@ def pardon(game, state, args):
     release_member(member, is_player=is_player, game=game, show_message=False)
     game.alert("Pardon", f"{name} has been pardoned and released from jail.")
     if is_player:
-        member["location"] = security_hallway_location()
         game.reset_view()
 
 

@@ -174,6 +174,31 @@ BOTANY_ITEMS = {
 }
 
 
+PLANTERS_PER_ROW = 4
+PLANTER_ROWS = 4
+
+
+def empty_planter():
+    return {
+        "occupied": False,
+        "plant": None,
+        "seed_id": None,
+        "produces": None,
+        "growth_class": None,
+        "planted_at_seconds": None,
+        "growth_stage": 0,
+        "dead": False,
+        "watered": False,
+        "miracle_grow": 0.0,
+        "yield_multiplier": 1,
+        "ooze_applied": False,
+    }
+
+
+def new_botany():
+    return {"planters": [empty_planter() for _ in range(PLANTERS_PER_ROW * PLANTER_ROWS)]}
+
+
 def growth_duration_seconds(growth_class):
     """Return seconds per stage advance for a growth class (defaults to crop)."""
     return GROWTH_CLASS_SECONDS.get(growth_class, GROWTH_CLASS_SECONDS["crop"])
@@ -186,26 +211,25 @@ def effective_stage_seconds(growth_class, miracle_grow=0.0):
     return max(MIN_STAGE_SECONDS, boosted)
 
 
-def compute_growth_stage(planted_at_seconds, growth_class, elapsed_seconds, miracle_grow=0.0):
-    """Return growth stage 1..5 from planted time vs master clock.
+def _stage_timing(planted_at_seconds, growth_class, elapsed_seconds, miracle_grow):
+    """(seconds since planting, seconds per stage)."""
+    return (max(0.0, float(elapsed_seconds) - float(planted_at_seconds)),
+            effective_stage_seconds(growth_class, miracle_grow))
 
-    GROWTH_CLASS_SECONDS is time spent on each stage before advancing.
-    Mature (stage 5) after (GROWTH_STAGES - 1) intervals. miracle_grow
-    (0.0 by default, 0.1 once applied) shortens each stage's duration.
+
+def compute_growth_stage(planted_at_seconds, growth_class, elapsed_seconds, miracle_grow=0.0):
+    """Return growth stage 1..GROWTH_STAGES from planted time vs master clock.
+
+    GROWTH_CLASS_SECONDS is time spent on each stage before advancing; miracle_grow shortens each stage.
     """
     if planted_at_seconds is None:
         return 1
-    stage_len = effective_stage_seconds(growth_class, miracle_grow)
-    elapsed = max(0.0, float(elapsed_seconds) - float(planted_at_seconds))
+    elapsed, stage_len = _stage_timing(planted_at_seconds, growth_class, elapsed_seconds, miracle_grow)
     return min(GROWTH_STAGES, 1 + int(elapsed / stage_len))
 
 
 def growth_stage_label(stage):
     """Display label for a growth stage."""
-    try:
-        stage = int(stage)
-    except (TypeError, ValueError):
-        stage = 1
     return GROWTH_STAGE_LABELS.get(stage, "Growing")
 
 
@@ -216,8 +240,7 @@ def growth_seconds_to_next_stage(planted_at_seconds, growth_class, elapsed_secon
     stage = compute_growth_stage(planted_at_seconds, growth_class, elapsed_seconds, miracle_grow)
     if stage >= GROWTH_STAGES:
         return 0
-    stage_len = effective_stage_seconds(growth_class, miracle_grow)
-    elapsed = max(0.0, float(elapsed_seconds) - float(planted_at_seconds))
+    elapsed, stage_len = _stage_timing(planted_at_seconds, growth_class, elapsed_seconds, miracle_grow)
     next_at = stage * stage_len
     return max(0, int(next_at - elapsed))
 
@@ -233,7 +256,7 @@ def refresh_planter_growth(planter, elapsed_seconds):
 
     Returns the current stage (0 if empty).
     """
-    if not planter or not planter.get("occupied"):
+    if not planter["occupied"]:
         return 0
     if planter.get("dead"):
         return int(planter.get("growth_stage") or 1)
@@ -265,14 +288,9 @@ def refresh_planter_growth(planter, elapsed_seconds):
     return raw_stage
 
 
-def refresh_all_planters_growth(player_data, elapsed_seconds=None):
+def refresh_all_planters_growth(player_data, elapsed_seconds):
     """Refresh growth_stage on all botany planters. Returns the planters list."""
-    from space_online.game.helper_methods.game_clock import get_elapsed_seconds
-
-    if elapsed_seconds is None:
-        elapsed_seconds = get_elapsed_seconds(player_data)
-    botany = player_data.get("botany") or {}
-    planters = botany.get("planters") or []
+    planters = player_data["botany"]["planters"]
     for planter in planters:
         refresh_planter_growth(planter, elapsed_seconds)
     return planters

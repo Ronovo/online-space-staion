@@ -9,8 +9,10 @@ from space_online.game.helper_methods.stock_market import (
     default_stock_market_state,
     serialize_companies,
 )
-from space_online.game.helper_methods.npc_movement import location_for_post, pick_random_hallway_location
+from space_online.game.helper_methods.health_bands import new_body
+from space_online.game.helper_methods.npc_movement import JOB_POST_KEY, location_for_post, pick_random_hallway_location
 from space_online.game.helper_methods.game_clock import default_game_clock
+from space_online.game.objects.botany_items import new_botany
 
 NPC_NAMES = [
     "Alex Chen", "Morgan Yu", "Sarah Connor", "John Shepard", "Ellen Ripley",
@@ -76,6 +78,9 @@ JOBS = {
     },
 }
 
+# Jobs a crew member can ask the Head of Personnel for: everything outside Administration.
+REQUESTABLE_JOBS = [job for job, info in JOBS.items() if info.get("department") != "Administration"]
+
 
 DEPARTMENT_ORDER = [
     "Civilian",
@@ -91,21 +96,8 @@ def group_jobs_by_department():
     by_dept = {}
     for job_name, job_info in JOBS.items():
         by_dept.setdefault(job_info["department"], []).append((job_name, job_info["credits"]))
-
-    result = []
-    seen = set()
-    for dept in DEPARTMENT_ORDER:
-        if dept in by_dept:
-            jobs = sorted(by_dept[dept], key=lambda x: x[1])
-            result.append((dept, [job_name for job_name, _ in jobs]))
-            seen.add(dept)
-
-    for dept in sorted(by_dept.keys()):
-        if dept not in seen:
-            jobs = sorted(by_dept[dept], key=lambda x: x[1])
-            result.append((dept, [job_name for job_name, _ in jobs]))
-
-    return result
+    order = [dept for dept in DEPARTMENT_ORDER if dept in by_dept] + sorted(set(by_dept) - set(DEPARTMENT_ORDER))
+    return [(dept, [job_name for job_name, _ in sorted(by_dept[dept], key=lambda x: x[1])]) for dept in order]
 
 
 SELECT_DEPARTMENT = "Select A Department"
@@ -123,10 +115,16 @@ def get_jobs_for_department(department):
 MAX_NAME_LENGTH = 40
 
 
-def _full_limbs():
+def _clean_record():
+    """The unhurt body and clean legal record every crew member, player included, starts with."""
     return {
-        "left_arm": 100, "right_arm": 100, "left_leg": 100,
-        "right_leg": 100, "chest": 100, "head": 100,
+        **new_body(),
+        "warrant": False,
+        "warrant_reason": "",
+        "fine_amount": 0,
+        "fine_reason": "",
+        "in_jail": False,
+        "jail_release_at_seconds": None,
     }
 
 
@@ -144,14 +142,7 @@ def _crew_record(name, job, credits, location, *, posted):
         "room_visit_remaining": 0,
         "npc_goal": None,
         "npc_goal_room_key": None,
-        "limbs": _full_limbs(),
-        "damage": {"burn": 0, "poison": 0, "oxygen": 0},
-        "warrant": False,
-        "warrant_reason": "",
-        "fine_amount": 0,
-        "fine_reason": "",
-        "in_jail": False,
-        "jail_release_at_seconds": None,
+        **_clean_record(),
     }
     if posted:
         record["on_duty"] = True
@@ -165,19 +156,7 @@ def _generate_station_crew(player_name, job):
     if player_name in available_names:
         available_names.remove(player_name)
 
-    department_head_credits = {
-        "Captain": 10000,
-        "Head of Personnel": 9000,
-        "Security Guard": 5000,
-        "Doctor": 7500,
-        "Engineer": 2500,
-        "Botanist": 3000,
-        "Bartender": 3500,
-    }
-
-    def _pick_npc_name(fallback_label):
-        if not available_names:
-            return f"NPC_{fallback_label.replace(' ', '')}"
+    def _pick_npc_name():
         npc_name = random.choice(available_names)
         available_names.remove(npc_name)
         return npc_name
@@ -196,28 +175,23 @@ def _generate_station_crew(player_name, job):
     if job == "Head of Personnel":
         # HoP always has an NPC Captain; remaining vacant head slots + 2 are Staff Assistants
         station_crew.append(
-            _crew_record(
-                _pick_npc_name("Captain"),
-                "Captain",
-                department_head_credits["Captain"],
-                location_for_post("Captain"),
-                posted=True,
-            )
+            _crew_record(_pick_npc_name(), "Captain", JOBS["Captain"]["credits"], location_for_post("Captain"),
+                         posted=True)
         )
-        vacant_roles = [j for j in department_head_credits if j not in (job, "Captain")]
-        for i in range(len(vacant_roles) + 2):
-            station_crew.append(_make_staff_assistant(_pick_npc_name(f"StaffAssistant{i + 1}")))
+        vacant_roles = [j for j in JOB_POST_KEY if j not in (job, "Captain")]
+        for _ in range(len(vacant_roles) + 2):
+            station_crew.append(_make_staff_assistant(_pick_npc_name()))
         return station_crew
 
-    for npc_job, credits in department_head_credits.items():
+    for npc_job in JOB_POST_KEY:
         if npc_job == job:
             continue
         station_crew.append(
-            _crew_record(_pick_npc_name(npc_job), npc_job, credits, location_for_post(npc_job), posted=True)
+            _crew_record(_pick_npc_name(), npc_job, JOBS[npc_job]["credits"], location_for_post(npc_job), posted=True)
         )
 
-    for i in range(2):
-        station_crew.append(_make_staff_assistant(_pick_npc_name(f"StaffAssistant{i + 1}")))
+    for _ in range(2):
+        station_crew.append(_make_staff_assistant(_pick_npc_name()))
     return station_crew
 
 
@@ -226,9 +200,6 @@ def create_character(player_name, department, job):
 
     Raises ValueError with a player-facing message when the input is invalid.
     """
-    # botany imports this module through the special rooms, so it can't be imported at the top.
-    from space_online.game.special_rooms.botany import new_botany
-
     player_name = (player_name or "").strip()
     if not player_name:
         raise ValueError("Please enter a character name.")
@@ -260,20 +231,14 @@ def create_character(player_name, department, job):
         "locker_inventory": build_default_locker_inventory(),
         "hands": {"left": None, "right": None},
         "credits": job_info["credits"],
-        "location": {"x": -1, "y": 0},
+        "location": dict(donut.QUARTERS_LOCATION),
         "stock_holdings": {},
         "bar_mixed_stock": {},
         "station_crew": station_crew,
         "stock_market": stock_market,
-        "limbs": _full_limbs(),
-        "damage": {"burn": 0, "poison": 0, "oxygen": 0},
+        **_clean_record(),
         "alcohol_percent": 0,
-        "warrant": False,
-        "warrant_reason": "",
-        "fine_amount": 0,
-        "fine_reason": "",
-        "in_jail": False,
-        "jail_release_at_seconds": None,
+        "damage_timers": {},
         "station_power": station_power,
         "ship_map": copy.deepcopy(donut.SHIP_MAP),
         "botany": new_botany(),

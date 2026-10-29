@@ -10,7 +10,7 @@ BALANCED_SYSTEM_LEVELS = {
 
 
 def default_station_power():
-    """Return a fresh station_power dict for new games or missing save data."""
+    """Return a fresh station_power dict for a new game."""
     return {
         "battery_level": 25.0,
         "solar_charging": False,
@@ -33,6 +33,22 @@ LOW_POWER_SYSTEM_LEVELS = {
     "security_systems": 5,
     "communication_array": 2,
 }
+
+BATTERY_CRITICAL = 10
+BATTERY_LOW = 50
+BATTERY_BAND_COLORS = {"outage": "#FF0000", "critical": "#FF0000", "low": "#FFFF00", "normal": "#00FF00"}
+
+
+def battery_band(level):
+    """'outage', 'critical', 'low' or 'normal' for a battery percentage."""
+    if level <= 0:
+        return "outage"
+    if level <= BATTERY_CRITICAL:
+        return "critical"
+    if level <= BATTERY_LOW:
+        return "low"
+    return "normal"
+
 
 SOLAR_CHARGE_RATE = 3.0  # % per minute when solar array is active
 HIGH_MODE_SOLAR_DRAIN = 0.5  # % per minute net loss when solar is on

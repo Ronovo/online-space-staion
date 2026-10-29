@@ -19,7 +19,7 @@
   <h3 style="color: #00CCFF">POWER &amp; SYSTEMS</h3>
   <div class="bar-line">
     <b class="bar-label">Battery</b>
-    <div class="bar small"><div class="bar-fill" style="width: {{ p.battery_fill_percent }}%; background: {{ power.battery_color }}"></div></div>
+    <div class="bar small"><div class="bar-fill" style="width: {{ power.battery_level }}%; background: {{ power.battery_color }}"></div></div>
     <b style="color: {{ power.battery_color }}">{{ "%.0f"|format(power.battery_level) }}%</b>
   </div>
   <p>Band: {{ power.battery_band }} &nbsp; Mode: {{ power.power_mode }} &nbsp; Solar:
@@ -47,11 +47,11 @@
   <p>Wanted: {{ sec.wanted_count }} &nbsp; Jailed: {{ sec.jailed_count }} &nbsp; Open fines: {{ sec.fines_count }}</p>
   {% for detail in sec.details %}
     {% if detail.kind == "wanted" %}
-      <p style="color: #FF6666">· {{ detail.name }} — {{ detail.reason }} (wanted)</p>
+      <p style="color: #FF6666">· {{ detail.name }} - {{ detail.reason }} (wanted)</p>
     {% elif detail.kind == "jailed" %}
-      <p style="color: #FFAA00">· {{ detail.name }} — {{ detail.reason }} (jailed)</p>
+      <p style="color: #FFAA00">· {{ detail.name }} - {{ detail.reason }} (jailed)</p>
     {% else %}
-      <p style="color: #FFFF00">· {{ detail.name }} — {{ detail.reason }}</p>
+      <p style="color: #FFFF00">· {{ detail.name }} - {{ detail.reason }}</p>
     {% endif %}
   {% else %}
     <p style="color: #00FF00">No security incidents.</p>
@@ -66,11 +66,7 @@
   {% else %}
     <p style="color: #00FF00">Locked rooms: None</p>
   {% endif %}
-  {% if fac.botany_total %}
-    <p>Botany: {{ fac.botany_occupied }}/{{ fac.botany_total }} planters occupied ({{ fac.botany_mature }} mature)</p>
-  {% else %}
-    <p>Botany: no planter data</p>
-  {% endif %}
+  <p>Botany: {{ fac.botany_occupied }}/{{ fac.botany_total }} planters occupied ({{ fac.botany_mature }} mature)</p>
 </section>
 
 <div class="button-row">{{ ui.close_btn() }}</div>

@@ -2,7 +2,6 @@ import datetime
 
 from space_online.game.helper_methods.door_control import (
     can_control_door,
-    is_door_locked,
     toggle_door_lock,
 )
 from space_online.game.helper_methods.lighting_helper import (
@@ -11,10 +10,10 @@ from space_online.game.helper_methods.lighting_helper import (
 )
 from space_online.game.helper_methods.npc_movement import any_npc_for_job, call_npc, on_duty_npc_for_job
 from space_online.game.helper_methods.jail import (
-    format_jail_time,
     is_jailed,
-    jail_seconds_remaining,
+    jailed_away_text,
     offer_player_arrest_choice,
+    player_jail_text,
 )
 from space_online.game.helper_methods.game_clock import get_elapsed_seconds
 from space_online.game.helper_methods.ui_panels import register_panel
@@ -68,11 +67,6 @@ def member_for_crew_index(crew_index, player_data, station_crew):
     return station_crew[crew_index]
 
 
-def player_has_subdepartment_access(player_data, allowed_subdepartments):
-    """Return True if the player's subdepartment is in the allowed set."""
-    return player_data.get("subdepartment", "") in allowed_subdepartments
-
-
 def is_players_own_job(player_data, job_name):
     """Whether the player holds job_name, so nobody can talk to or call themselves."""
     return player_data.get("job") == job_name
@@ -107,12 +101,8 @@ def npc_contact_widgets(game, job_name, *, talk_label, talk_action, absent_flavo
     if away_npc is None:
         return []
 
-    name = away_npc.get("name", "They")
     if is_jailed(away_npc):
-        remaining = format_jail_time(
-            jail_seconds_remaining(away_npc, get_elapsed_seconds(game.player_data))
-        )
-        return [text_line(f"{name} is in jail and will be released in {remaining}.", color="orange", style="italic")]
+        return [text_line(jailed_away_text(away_npc, get_elapsed_seconds(game.player_data)), color="orange", style="italic")]
 
     return [
         text_line(absent_flavor or f"The {job_name} is away from their post.", color="lightgray", style="italic"),
@@ -147,7 +137,7 @@ class SpecialRoomBase:
         return [
             entry for entry in self.STATION_ENTRIES
             if entry.get("subdepartments") is None
-            or player_has_subdepartment_access(self.player_data, entry["subdepartments"])
+            or self.player_data["subdepartment"] in entry["subdepartments"]
         ]
 
     def station_allowed(self, mode):
@@ -231,11 +221,7 @@ class SpecialRoomBase:
 
         elapsed_seconds = get_elapsed_seconds(self.player_data)
         if is_jailed(away_npc):
-            remaining = format_jail_time(jail_seconds_remaining(away_npc, elapsed_seconds))
-            self.game.alert(
-                "In Jail",
-                f"{away_npc.get('name', 'They')} is in jail and will be released in {remaining}.",
-            )
+            self.game.alert("In Jail", jailed_away_text(away_npc, elapsed_seconds))
             return
 
         success, message = call_npc(away_npc, elapsed_seconds)
@@ -246,15 +232,9 @@ class SpecialRoomBase:
 
     @room_action
     def exit(self):
-        """Leave the room unless its door is locked or the player is jailed."""
+        """Leave the room unless the player is jailed. A locked door only stops people coming in."""
         if is_jailed(self.player_data) and self.DOOR_KEY == SECURITY_KEY:
-            remaining = format_jail_time(
-                jail_seconds_remaining(self.player_data, get_elapsed_seconds(self.player_data))
-            )
-            self.game.alert("In Jail", f"You are in jail. Time remaining: {remaining}.")
-            return
-        if is_door_locked(self.player_data, self.DOOR_KEY):
-            self.game.alert("Locked Door", "The door is locked. You must unlock it before leaving.")
+            self.game.alert("In Jail", player_jail_text(self.player_data))
             return
         self.game.leave_room()
 

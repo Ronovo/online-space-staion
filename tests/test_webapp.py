@@ -1,4 +1,4 @@
-from conftest import act, create_character, post, register
+from helpers import act, create_character, post, register
 
 
 def test_home_requires_login(client):
@@ -41,6 +41,10 @@ def test_login_and_logout(client):
     register(client)
     post(client, "/logout")
     response = post(client, "/login", username="pilot", password="hunter22")
+    assert response.headers["Location"].endswith("/character/new")
+    create_character(client)
+    post(client, "/logout")
+    response = post(client, "/login", username="pilot", password="hunter22")
     assert response.headers["Location"].endswith("/")
     response = post(client, "/logout")
     assert response.headers["Location"].endswith("/login")
@@ -77,8 +81,15 @@ def test_act_tick_returns_screen_and_skips_unchanged_html(client):
     assert {"hash", "title", "alerts", "choice", "html"} <= first.keys()
 
     second = act(client, action="tick", hash=first["hash"]).get_json()
-    if second["hash"] == first["hash"]:
-        assert "html" not in second
+    assert ("html" in second) == (second["hash"] != first["hash"])
+
+
+def test_act_args_that_are_not_an_object_are_ignored(client):
+    register(client)
+    create_character(client)
+    response = act(client, action="game.move", args=["north"])
+    assert response.status_code == 200
+    assert "redirect" not in response.get_json()
 
 
 def test_act_without_character_redirects_to_creation(client):

@@ -10,6 +10,21 @@
 <button type="button" class="list-row{% if selected %} selected{% endif %} {{ cls }}" data-action="{{ action }}" data-args='{{ args|tojson }}'>{{ label }}</button>
 {%- endmacro %}
 
+{% macro hand_rows(hands, can_equip=False) -%}
+<div class="hands-list">
+  {% for hand in hands %}
+  <div class="hand-row">
+    <span>{{ hand.label }}: {{ hand.held or "Empty" }}</span>
+    {% if hand.held %}
+      {{ btn("Unequip", "panel.unequip", {"side": hand.side}, "btn-small") }}
+    {% elif can_equip and hand.can_equip %}
+      {{ btn("Equip Left" if hand.side == "left" else "Equip Right", "panel.equip", {"side": hand.side}, "btn-small") }}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
 {% macro feedback(fb) -%}
 <p class="feedback"{% if fb %} style="color: {{ fb.color }}"{% endif %}>{{ fb.text if fb else "" }}</p>
 {%- endmacro %}

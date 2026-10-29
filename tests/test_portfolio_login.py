@@ -7,7 +7,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from tests.conftest import create_character, post, register
+from helpers import create_character, post, register
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 PUBLIC_KEY = base64.b64encode(KEY.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)).decode()

@@ -10,32 +10,26 @@ from space_online.game.maps.donut import (
 SPECIAL_ROOM_DOORS = {
     BRIDGE_KEY: {
         "room_name": "Bridge",
-        "desc_base": "The control center of the station.",
         "permission": frozenset({"Captain", "HoP"}),
     },
     MEDBAY_KEY: {
         "room_name": "MedBay",
-        "desc_base": "The medical facility of the station.",
         "permission": frozenset({"Captain", "HoP", "Doctor"}),
     },
     SECURITY_KEY: {
         "room_name": "Security",
-        "desc_base": "The security center of the station.",
         "permission": frozenset({"Captain", "Security"}),
     },
     ENGINEERING_KEY: {
         "room_name": "Engineering Bay",
-        "desc_base": "The station's engineering and maintenance center.",
         "permission": frozenset({"Captain", "HoP", "Engineer"}),
     },
     BAR_KEY: {
         "room_name": "Bar",
-        "desc_base": "The station's social hub where crew members can relax and enjoy drinks.",
         "permission": frozenset({"Captain", "HoP", "Bar"}),
     },
     BOTANY_KEY: {
         "room_name": "Botany Lab",
-        "desc_base": "The station's plant cultivation and research facility.",
         "permission": frozenset({"Captain", "HoP", "Botany"}),
     },
 }
@@ -61,18 +55,10 @@ def toggle_door_lock(game, door_key):
         game.alert("Door Control", ACCESS_ERROR)
         return False
 
-    door = SPECIAL_ROOM_DOORS[door_key]
-    room_name = door["room_name"]
-    desc_base = door["desc_base"]
-
-    if ship_map[door_key].get("locked", False):
-        ship_map[door_key]["locked"] = False
-        ship_map[door_key]["desc"] = f"{desc_base} The door is unlocked."
-        message = f"The {room_name} door has been unlocked."
-    else:
-        ship_map[door_key]["locked"] = True
-        ship_map[door_key]["desc"] = f"{desc_base} The door is locked."
-        message = f"The {room_name} door has been locked."
+    room_name = SPECIAL_ROOM_DOORS[door_key]["room_name"]
+    locked = not ship_map[door_key]["locked"]
+    ship_map[door_key]["locked"] = locked
+    message = f"The {room_name} door has been {'locked' if locked else 'unlocked'}."
 
     game.alert("Door Control", message)
     return True

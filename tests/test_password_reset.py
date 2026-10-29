@@ -1,4 +1,4 @@
-from tests.conftest import QUESTION, post, register
+from helpers import QUESTION, post, register
 
 
 def reset(client, username, answer, password="newpass1"):
@@ -34,7 +34,6 @@ def test_wrong_answers_lock_resets(client):
     assert b"Too many wrong answers" in reset(client, "pilot", "rex").data
 
 
-def test_unknown_usernames_get_a_steady_stand_in_question(client):
-    first = post(client, "/reset-password", username="ghost").data
-    assert first == post(client, "/reset-password", username="ghost").data
-    assert b"That answer is wrong" in reset(client, "ghost", "anything").data
+def test_an_unknown_username_says_there_is_no_such_account(client):
+    assert b"There is no account with that username" in post(client, "/reset-password", username="ghost").data
+    assert b"There is no account with that username" in reset(client, "ghost", "anything").data

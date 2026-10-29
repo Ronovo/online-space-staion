@@ -1,37 +1,33 @@
 import datetime
 
-from space_online.game.helper_methods.health_bands import damage_band, health_band
+from space_online.game.helper_methods.health_bands import DAMAGE_TYPES, LIMBS, average_limb_health, damage_band, health_band, limb_label
 from space_online.game.helper_methods.ui_panels import panel_action, register_panel
 from space_online.game.objects.items import inventory_item_count
 
-LIMB_ORDER = ["head", "chest", "left_arm", "right_arm", "left_leg", "right_leg"]
-DAMAGE_TYPES = (("Burn", "burn"), ("Poison", "poison"), ("Oxygen", "oxygen"))
 
 
 @register_panel("character_sheet", "Character Sheet")
 def character_sheet_panel(game, state):
     player_data = game.player_data
-    alcohol_value = player_data.setdefault("alcohol_percent", 0)
+    alcohol_value = player_data["alcohol_percent"]
 
     damage_rows = []
-    for label, key in DAMAGE_TYPES:
-        value = player_data["damage"].get(key, 0)
-        effect = None
-        if value >= 30:
-            effect = "Severe" if value >= 70 else "Moderate" if value >= 50 else "Mild"
-        damage_rows.append({"name": label, "value": value, "color": damage_band(value)[1], "effect": effect})
+    for key in DAMAGE_TYPES:
+        value = player_data["damage"][key]
+        status, color = damage_band(value)
+        damage_rows.append({"name": key.title(), "value": value, "color": color,
+                            "effect": None if status == "Clear" else status})
 
     limbs = [
         {
-            "name": limb.replace("_", " ").title(),
+            "name": limb_label(limb),
             "health": player_data["limbs"][limb],
             "color": health_band(player_data["limbs"][limb])[1],
         }
-        for limb in LIMB_ORDER
-        if limb in player_data["limbs"]
+        for limb in LIMBS
     ]
 
-    limb_health = sum(player_data["limbs"].values()) / len(player_data["limbs"])
+    limb_health = average_limb_health(player_data)
     damage_health = 100 - (sum(player_data["damage"].values()) / len(player_data["damage"]))
 
     return {
@@ -70,7 +66,7 @@ def open_notes(game, state, args):
 
 @register_panel("holdings", "Stock Holdings")
 def holdings_panel(game, state):
-    return {"holdings": list((game.player_data.get("stock_holdings") or {}).items())}
+    return {"holdings": list(game.player_data["stock_holdings"].items())}
 
 
 @register_panel("notes", "Character Notes")

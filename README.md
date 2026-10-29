@@ -20,7 +20,7 @@ accounts, where each account owns one character whose progress is saved on the s
 - Control system power allocation (life support, lighting, security, communications)
 - Solar panel charging system
 - Power modes including emergency settings
-- Engineering panel access for Engineers and the Captain
+- Engineering panel access for Engineers, the Captain and the Head of Personnel
 
 ### Medical System
 - Health tracking for limbs, burns, poison, and oxygen
@@ -32,14 +32,15 @@ accounts, where each account owns one character whose progress is saved on the s
 - Access control for restricted areas
 - Door locking and unlocking for authorized personnel
 - Crew manifest for Security staff
-- Warrants, fines and jail time: Security Guards arrest crew with warrants, fines can be paid or bribed down,
-  and the Captain can pardon
+- Warrants, fines and jail time: Security Guards arrest crew with warrants, wanted crew sometimes offer a bribe
+  to be let go, unpaid fines are settled with a guard, and anyone who can work the Security station can pardon
+  prisoners
 
 ### Stock Market
 - Real-time market simulation with automatic updates
 - Buy and sell shares in various companies from your quarters computer
 - Price history tracking and visualization
-- Portfolio management and profit tracking
+- Holdings view of the shares you own and what they are worth
 - Filtering options and detailed transaction history
 
 ### Bar System
@@ -52,12 +53,13 @@ accounts, where each account owns one character whose progress is saved on the s
 - Seed collection from the botanist station
 - Plant seeds across multiple planters, and water them before each growth stage or they die
 - Planter status monitoring, Miracle Grow and Plentiful Harvest
-- Harvesting needs a Trowel or Chainsaw in your hands
+- Mature plants are harvested from the botanist station; dead plants are cleared with a Trowel, or a Chainsaw for trees
 - Special access for Botanists
 
 ### Life Support
 - Oxygen levels tied to power allocation
-- Emergency protocols from Engineering
+- A station-wide emergency announcement when life support is switched off, with a short grace period before
+  oxygen damage starts
 - Effects on player and crew safety when systems are underpowered
 
 ### Bridge and Personnel
@@ -72,7 +74,7 @@ accounts, where each account owns one character whose progress is saved on the s
 
 ## Running it
 
-Requires Python 3.9 or newer.
+Requires Python 3.10 or newer.
 
 ```sh
 python -m venv .venv

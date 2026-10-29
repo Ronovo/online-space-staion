@@ -1,17 +1,16 @@
 """Captain's Station Status: aggregate live station data for the briefing panel."""
 
-from space_online.game.helper_methods.health_bands import health_band
+from space_online.game.helper_methods.health_bands import health_band, overall_health
 from space_online.game.helper_methods.door_control import SPECIAL_ROOM_DOORS
 from space_online.game.helper_methods.game_clock import format_elapsed, get_elapsed_seconds
 from space_online.game.helper_methods.npc_movement import has_post
 from space_online.game.helper_methods.oxygen_helper import DAMAGE_THRESHOLD_LEVEL, WARNING_THRESHOLDS
-from space_online.game.helper_methods.power_constants import default_station_power
+from space_online.game.helper_methods.power_constants import BATTERY_BAND_COLORS, battery_band
 from space_online.game.helper_methods.ui_panels import register_panel
 from space_online.game.maps import donut
-from space_online.game.objects.botany_items import refresh_all_planters_growth
+from space_online.game.objects.botany_items import GROWTH_STAGES, refresh_all_planters_growth
 
 OXYGEN_STRESS_THRESHOLD = WARNING_THRESHOLDS[0]
-BOTANY_MATURE_STAGE = 5
 
 SYSTEM_DISPLAY = (
     ("life_support", "Life Support"),
@@ -28,29 +27,8 @@ OVERALL_COLORS = {
 
 
 def crew_health_status(member):
-    """Return Healthy / Injured / Critical using MedBay vitals thresholds."""
-    limbs = member.get("limbs", {}) or {}
-    damage = member.get("damage", {}) or {}
-    total_limb_health = sum(limbs.values())
-    max_limb_health = len(limbs) * 100 if limbs else 1
-    avg_limb_health = (total_limb_health / max_limb_health) * 100
-
-    total_damage_percent = sum(damage.values())
-    max_damage_percent = len(damage) * 100 if damage else 1
-    avg_damage_taken = (total_damage_percent / max_damage_percent) * 100
-    overall_health = avg_limb_health * (1 - (avg_damage_taken / 100))
-
-    return health_band(overall_health)[0]
-
-
-def _battery_band(level):
-    if level <= 0:
-        return "Outage", "#FF0000"
-    if level <= 10:
-        return "Critical", "#FF0000"
-    if level <= 50:
-        return "Low", "#FFFF00"
-    return "Normal", "#00FF00"
+    """(Healthy / Injured / Critical, colour) for a crew member's overall health."""
+    return health_band(overall_health(member))
 
 
 def _is_on_duty(member):
@@ -64,11 +42,11 @@ def _is_on_duty(member):
 
 def collect_station_status(player_data, station_crew):
     """Aggregate captain-facing station metrics into a single status dict."""
-    power = player_data.get("station_power") or default_station_power()
-    system_levels = power.get("system_levels") or {}
+    power = player_data["station_power"]
+    system_levels = power["system_levels"]
     battery_level = float(power.get("battery_level", 0) or 0)
     life_support = int(system_levels.get("life_support", 0) or 0)
-    battery_band, battery_color = _battery_band(battery_level)
+    band = battery_band(battery_level)
 
     if life_support <= 0:
         oxygen_threat = "emergency"
@@ -90,17 +68,17 @@ def collect_station_status(player_data, station_crew):
             }
         )
 
-    all_crew = [player_data] + list(station_crew or [])
+    all_crew = [player_data] + list(station_crew)
     healthy = injured = critical = oxygen_stress = on_duty = away = 0
     for member in all_crew:
-        status = crew_health_status(member)
+        status = crew_health_status(member)[0]
         if status == "Healthy":
             healthy += 1
         elif status == "Injured":
             injured += 1
         else:
             critical += 1
-        if (member.get("damage") or {}).get("oxygen", 0) >= OXYGEN_STRESS_THRESHOLD:
+        if member["damage"]["oxygen"] >= OXYGEN_STRESS_THRESHOLD:
             oxygen_stress += 1
         if _is_on_duty(member):
             on_duty += 1
@@ -142,49 +120,25 @@ def collect_station_status(player_data, station_crew):
     elapsed_seconds = get_elapsed_seconds(player_data)
     planters = refresh_all_planters_growth(player_data, elapsed_seconds)
     botany_total = len(planters)
-    botany_occupied = sum(1 for p in planters if p.get("occupied"))
-    botany_mature = sum(
-        1
-        for p in planters
-        if p.get("occupied") and int(p.get("growth_stage", 0) or 0) >= BOTANY_MATURE_STAGE
-    )
+    botany_occupied = sum(1 for p in planters if p["occupied"])
+    botany_mature = sum(1 for p in planters if p["occupied"] and p["growth_stage"] >= GROWTH_STAGES)
 
-    market = player_data.get("stock_market") or {}
-    cycle_number = market.get("cycle_number", 1)
+    market = player_data["stock_market"]
+    cycle_number = market["cycle_number"]
 
     announcements = player_data.get("announcements") or []
     emergency_announcements = [a for a in announcements if a.get("type") == "emergency"]
 
     alerts = []
-    if life_support <= 0:
-        alerts.append(
-            {
-                "text": "Life Support offline — oxygen emergency active",
-                "severity": "critical",
-            }
-        )
+    if oxygen_threat == "emergency":
+        alerts.append({"text": "Life Support offline: oxygen emergency active", "severity": "critical"})
     elif oxygen_threat == "damaging":
-        alerts.append(
-            {
-                "text": f"Life Support degraded (Lv {life_support}) — oxygen damage active",
-                "severity": "caution",
-            }
-        )
+        alerts.append({"text": f"Life Support degraded (Lv {life_support}): oxygen damage active", "severity": "caution"})
 
-    if battery_level <= 10:
-        alerts.append(
-            {
-                "text": f"Battery critical ({battery_level:.0f}%)",
-                "severity": "critical",
-            }
-        )
-    elif battery_level <= 50:
-        alerts.append(
-            {
-                "text": f"Battery low ({battery_level:.0f}%)",
-                "severity": "caution",
-            }
-        )
+    if band in ("outage", "critical"):
+        alerts.append({"text": f"Battery critical ({battery_level:.0f}%)", "severity": "critical"})
+    elif band == "low":
+        alerts.append({"text": f"Battery low ({battery_level:.0f}%)", "severity": "caution"})
 
     if critical > 0:
         alerts.append(
@@ -249,15 +203,15 @@ def collect_station_status(player_data, station_crew):
 
     overall = "NOMINAL"
     if (
-        battery_level <= 10
-        or life_support <= 0
+        band in ("outage", "critical")
+        or oxygen_threat == "emergency"
         or critical > 0
         or emergency_announcements
     ):
         overall = "CRITICAL"
     elif (
-        battery_level <= 50
-        or life_support <= DAMAGE_THRESHOLD_LEVEL
+        band == "low"
+        or oxygen_threat == "damaging"
         or injured > 0
         or fine_details
         or locked_rooms
@@ -276,8 +230,8 @@ def collect_station_status(player_data, station_crew):
         "alerts": alerts,
         "power": {
             "battery_level": battery_level,
-            "battery_band": battery_band,
-            "battery_color": battery_color,
+            "battery_band": band.title(),
+            "battery_color": BATTERY_BAND_COLORS[band],
             "solar_charging": bool(power.get("solar_charging")),
             "power_mode": power.get("power_mode") or "balanced",
             "systems": systems,
@@ -312,5 +266,4 @@ def collect_station_status(player_data, station_crew):
 @register_panel("station_status", "Station Status")
 def station_status_panel(game, state):
     status = collect_station_status(game.player_data, game.station_crew)
-    status["battery_fill_percent"] = max(0, min(100, status["power"]["battery_level"]))
     return status
