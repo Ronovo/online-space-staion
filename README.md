@@ -94,6 +94,7 @@ Open http://127.0.0.1:5000, register an account, and create your character.
 | `HOST` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` so other machines on your network can connect. |
 | `PORT` | `5000` | Port to listen on. |
 | `SPACE_ONLINE_SECRET_KEY` | generated | Session signing key. If unset, one is generated once into `instance/secret_key`. |
+| `SECURE_COOKIES` | Off | `1` marks the login cookie Secure, for a site served over HTTPS. |
 
 With `PORTFOLIO_SSO_URL` (the portfolio's address) and `PORTFOLIO_SSO_PUBLIC_KEY`
 (printed by the portfolio's `python sso.py`) set, the login page offers to log in with a portfolio account. It

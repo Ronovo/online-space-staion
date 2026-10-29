@@ -60,6 +60,7 @@ def create_app(test_config=None):
         DATABASE=os.path.join(app.instance_path, "space_online.sqlite3"),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("SECURE_COOKIES") == "1",
     )
     if test_config:
         app.config.update(test_config)
