@@ -2,7 +2,7 @@ FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a7
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    REPO_URL=https://github.com/Ronovo/online-space-staion.git \
+    REPO_URL=https://github.com/Ronovo/online-space-station.git \
     BUILD_CMD="pip install --no-cache-dir --user -q -r requirements.txt"
 
 WORKDIR /app

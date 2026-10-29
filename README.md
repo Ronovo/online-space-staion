@@ -185,3 +185,7 @@ The station uses a hollow-square hallway ring with special rooms branching off i
 - Use the stock market on your quarters computer to earn additional credits
 - Explore all rooms to discover features, items, and job-specific stations
 - Progress saves automatically; Save and Exit returns you to your account page
+
+## License
+
+BSD 2-Clause. See [LICENSE](LICENSE).
