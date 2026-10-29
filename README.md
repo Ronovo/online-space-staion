@@ -90,11 +90,13 @@ Open http://127.0.0.1:5000, register an account, and create your character.
 | `PORT` | `5000` | Port to listen on. |
 | `SPACE_ONLINE_SECRET_KEY` | generated | Session signing key. If unset, one is generated once into `instance/secret_key`. |
 
-With `RONOVO_SSO_URL` (the portfolio's address, such as `http://ronovo.lan`) and `RONOVO_SSO_PUBLIC_KEY`
-(printed by the portfolio's `python sso.py`) set, the login page offers **Log in with Ronovo**. The first Ronovo
-login creates an account named after the Ronovo username, with a number added if that name is taken, and
-every later Ronovo login from any device uses the same one. That account has no password of its own, so
-Ronovo is the only way into it. Without those two settings the app runs on its own.
+With `PORTFOLIO_SSO_URL` (the portfolio's address, such as `http://ronovo.lan`) and `PORTFOLIO_SSO_PUBLIC_KEY`
+(printed by the portfolio's `python sso.py`) set, the login page offers to log in with a portfolio account. It
+reads **Log In as** and the portfolio username when this browser is logged in to the portfolio. The first
+portfolio login here asks whether to link an account the player already has, by logging in to it once, or to
+make a new one named after the portfolio username, with a number added if that name is taken. Every later
+portfolio login from any device opens the linked account. A new account has no password of its own, so the
+portfolio is the only way into it. Without those two settings the app runs on its own.
 
 Accounts and characters are stored in `instance/space_online.sqlite3`, next to `run_server.py`. The
 `instance/` folder is the game's only data: back it up to keep your players, delete it to start fresh.

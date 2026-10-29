@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS characters (
 """
 # Added after the first release, so they are created on older databases as well
 USER_COLUMNS = {
-    "ronovo_sub": "TEXT",
+    "portfolio_sub": "TEXT",
     "security_question": "TEXT",
     "security_answer_hash": "TEXT",
     "reset_failures": "INTEGER NOT NULL DEFAULT 0",
@@ -61,16 +61,16 @@ def init_db(app):
         for column, kind in USER_COLUMNS.items():
             if column not in existing:
                 db.execute(f"ALTER TABLE users ADD COLUMN {column} {kind}")
-        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_ronovo_sub ON users (ronovo_sub)")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_portfolio_sub ON users (portfolio_sub)")
         close_db()
 
 
-def create_user(username, password_hash, ronovo_sub=None):
-    """Insert an account. Returns the new id, or None if the username (or Ronovo account) is taken."""
+def create_user(username, password_hash, portfolio_sub=None):
+    """Insert an account. Returns the new id, or None if the username (or portfolio account) is taken."""
     try:
         cursor = get_db().execute(
-            "INSERT INTO users (username, password_hash, created_at, ronovo_sub) VALUES (?, ?, ?, ?)",
-            (username, password_hash, _now(), ronovo_sub),
+            "INSERT INTO users (username, password_hash, created_at, portfolio_sub) VALUES (?, ?, ?, ?)",
+            (username, password_hash, _now(), portfolio_sub),
         )
     except sqlite3.IntegrityError:
         return None
@@ -109,8 +109,17 @@ def set_password(user_id, password_hash):
     )
 
 
-def get_user_by_ronovo(sub):
-    return get_db().execute("SELECT * FROM users WHERE ronovo_sub = ?", (sub,)).fetchone()
+def get_user_by_portfolio(sub):
+    return get_db().execute("SELECT * FROM users WHERE portfolio_sub = ?", (sub,)).fetchone()
+
+
+def link_portfolio(user_id, sub):
+    """Links an account to a portfolio account. False when either one is already linked."""
+    try:
+        return get_db().execute("UPDATE users SET portfolio_sub = ? WHERE id = ? AND portfolio_sub IS NULL",
+                                (sub, user_id)).rowcount == 1
+    except sqlite3.IntegrityError:
+        return False
 
 
 def character_summary(user_id):

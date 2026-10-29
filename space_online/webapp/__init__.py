@@ -30,11 +30,12 @@ from space_online.game.character_methods.character_creation import (
 )
 from space_online.game.helper_methods.ui_panels import default_ui_state
 from space_online.game.main import SpaceStationGame
-from space_online.webapp import db, ronovo_sso, security_questions
+from space_online.webapp import db, portfolio_sso, security_questions
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 MIN_PASSWORD_LENGTH = 6
 MAX_PASSWORD_LENGTH = 128
+PORTFOLIO_CHOICE_SECONDS = 600
 
 
 def _load_secret_key(instance_path):
@@ -109,18 +110,18 @@ def _log_in(user_id, username):
     session["username"] = username
 
 
-def _ronovo_user(account):
-    """The account tied to a Ronovo account, created on its first login and named after it. Its password is
-    random and never shown, so logging in with Ronovo is the only way in."""
-    user = db.get_user_by_ronovo(account["sub"])
+def _portfolio_user(account):
+    """A new account linked to a portfolio account and named after it. Its password is random and never shown,
+    so logging in with the portfolio account is the only way in."""
+    user = db.get_user_by_portfolio(account["sub"])
     base = account["username"] if USERNAME_PATTERN.match(account["username"]) else "player"
     n = 1
     while user is None:
         name = base if n == 1 else f"{base[:32 - len(str(n))]}{n}"
-        # None when the name is taken, or when a second login for this Ronovo account got there first.
+        # None when the name is taken, or when a second login for this portfolio account got there first.
         if db.create_user(name, generate_password_hash(secrets.token_urlsafe(32)), account["sub"]) is None:
             n += 1
-        user = db.get_user_by_ronovo(account["sub"])
+        user = db.get_user_by_portfolio(account["sub"])
     return user
 
 
@@ -136,21 +137,58 @@ def _render_screen(view):
 def _register_routes(app):
     @app.context_processor
     def inject_globals():
-        return {"csrf_token": _csrf_token, "current_user": session.get("username"), "ronovo": ronovo_sso.enabled()}
+        return {"csrf_token": _csrf_token, "current_user": session.get("username"), "portfolio": portfolio_sso.enabled(),
+                "portfolio_url": portfolio_sso.portfolio_url() if portfolio_sso.enabled() else ""}
 
-    # The Ronovo callback is posted by the portfolio, so it carries no CSRF token. Its signed login token
+    # The portfolio login callback is posted by the portfolio, so it carries no CSRF token. Its signed login token
     # and the state cookie set by /sso/login are what prove it.
     @app.before_request
     def protect_posts():
         if request.method == "POST" and request.endpoint != "sso_callback":
             _check_csrf()
 
-    def ronovo_login(account):
-        user = _ronovo_user(account)
+    def _enter(user):
         _log_in(user["id"], user["username"])
         return redirect(url_for("home" if db.character_summary(user["id"]) else "new_character"))
 
-    ronovo_sso.add_flask_routes(app, "space-online", ronovo_login)
+    # The first portfolio login here asks whether to link an account the player already has or make a new one,
+    # so it waits in the session until they choose.
+    def portfolio_login(account):
+        user = db.get_user_by_portfolio(account["sub"])
+        if user is not None:
+            return _enter(user)
+        session.clear()
+        session["portfolio_pending"] = {**account, "expires": time.time() + PORTFOLIO_CHOICE_SECONDS}
+        return redirect(url_for("link_account"))
+
+    portfolio_sso.add_flask_routes(app, "space-online", portfolio_login)
+
+    @app.route("/link-account", methods=["GET", "POST"])
+    def link_account():
+        pending = session.get("portfolio_pending")
+        if not pending or pending["expires"] < time.time():
+            session.pop("portfolio_pending", None)
+            flash("Log in with your portfolio account again.", "error")
+            return redirect(url_for("login"))
+        username = request.form.get("username", pending["username"]).strip()
+        action = request.form.get("action")
+        if action == "cancel":
+            session.clear()
+            return redirect(url_for("login"))
+        if action == "new":
+            return _enter(_portfolio_user(pending))
+        if action == "link":
+            user = db.get_user_by_name(username)
+            if user is None or not check_password_hash(user["password_hash"], request.form.get("password", "")):
+                flash("Incorrect username or password.", "error")
+            elif not db.link_portfolio(user["id"], pending["sub"]):
+                flash("That account is already linked to another portfolio account.", "error")
+            else:
+                _log_in(user["id"], user["username"])
+                if not user["security_answer_hash"]:
+                    return redirect(url_for("security_question"))
+                return redirect(url_for("home"))
+        return render_template("link_account.html", name=pending["username"], username=username)
 
     @app.route("/")
     @login_required

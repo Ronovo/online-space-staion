@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Link Your Account - Space Station Explorer{% endblock %}
+{% block content %}
+<section class="card auth-card">
+  <h1>Link Your Account</h1>
+  <p class="muted">This is the first time {{ name }} has logged in here. If you already have a Space Station Explorer
+    account, log in to it once to link it. After that, your portfolio account opens it on any device.</p>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username
+      <input type="text" name="username" value="{{ username }}" autocomplete="username">
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" autofocus>
+    </label>
+    <button class="btn" type="submit" name="action" value="link">Link This Account</button>
+    <button class="btn" type="submit" name="action" value="new">Make a New Account</button>
+    <button class="btn" type="submit" name="action" value="cancel">Cancel</button>
+  </form>
+</section>
+{% endblock %}
