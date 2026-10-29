@@ -5,14 +5,12 @@ for the duration of a single request: advance the master clock, run one
 client action, then describe the screen to render.
 """
 
-import datetime
 import logging
-import random
 import time
 import uuid
 
 from space_online.game.maps import donut
-from space_online.game.helper_methods.stock_market import StockMarketEngine
+from space_online.game.helper_methods.stock_market import StockMarketEngine, round_credits
 from space_online.game.helper_methods.npc_movement import (
     roll_departures,
     step_wanderers,
@@ -33,6 +31,7 @@ from space_online.game.helper_methods.jail import (
     warrant_reason_text,
 )
 from space_online.game.helper_methods.game_clock import (
+    seconds_since_last_tick,
     advance,
     get_elapsed_seconds,
 )
@@ -125,7 +124,7 @@ class SpaceStationGame(PlayerMovementMixin):
     def to_save_data(self):
         """Market state synced and credits rounded, ready to persist."""
         self.market_engine.sync_to_player_data(self.player_data)
-        self.player_data["credits"] = round(self.player_data["credits"], 2)
+        self.player_data["credits"] = round_credits(self.player_data["credits"])
         return self.player_data
 
     # --- Messages ----------------------------------------------------------
@@ -199,13 +198,8 @@ class SpaceStationGame(PlayerMovementMixin):
 
     def tick(self):
         """Advance the master clock and every system tied to it, at most once per interval."""
-        clock = self.player_data["game_clock"]
-        try:
-            last = datetime.datetime.fromisoformat(clock["last_real_time"])
-            if (datetime.datetime.now() - last).total_seconds() < MASTER_TICK_INTERVAL_SECONDS:
-                return
-        except (KeyError, TypeError, ValueError):
-            pass
+        if seconds_since_last_tick(self.player_data) < MASTER_TICK_INTERVAL_SECONDS:
+            return
 
         elapsed_seconds, delta_seconds = advance(self.player_data)
 
@@ -262,17 +256,17 @@ class SpaceStationGame(PlayerMovementMixin):
         else:
             net_change = charge_rate - total_discharge_rate
 
-        new_level = max(0, min(100, power["battery_level"] + net_change))
+        old_level = power["battery_level"]
+        new_level = max(0, min(100, old_level + net_change))
         power["battery_level"] = new_level
         clamp_lighting_for_battery(power)
 
-        if 0 < new_level <= 10:
-            if random.random() < 0.2:
-                self.report(
-                    "Low Power Warning",
-                    "Warning: Station battery power low. Emergency lighting active. Please activate solar panels.",
-                    kind="warning",
-                )
+        if 0 < new_level <= 10 < old_level:
+            self.report(
+                "Low Power Warning",
+                "Warning: Station battery power low. Emergency lighting active. Please activate solar panels.",
+                kind="warning",
+            )
         elif new_level <= 0:
             self.trigger_power_outage()
 
@@ -301,7 +295,7 @@ class SpaceStationGame(PlayerMovementMixin):
     # --- Navigation -------------------------------------------------------------
 
     def location_key(self):
-        return f"{self.player_data['location']['x']},{self.player_data['location']['y']}"
+        return donut.location_key(self.player_data["location"])
 
     def current_room_name(self):
         return SPECIAL_ROOM_TILES.get(self.location_key())
@@ -316,7 +310,7 @@ class SpaceStationGame(PlayerMovementMixin):
             self.reset_view()
         if self.location_key() not in self.ship_map:
             self.alert("Error", "Invalid location!", kind="error")
-            self.player_data["location"] = {"x": 0, "y": 0}
+            self.player_data["location"] = dict(donut.QUARTERS_LOCATION)
             self.reset_view()
 
     def _hallway_buttons(self, x, y):
@@ -382,8 +376,7 @@ class SpaceStationGame(PlayerMovementMixin):
             self.alert("Locked", f"The {SPECIAL_ROOM_TILES[room_key]} door is locked.")
             return
 
-        x_str, y_str = room_key.split(",")
-        self.player_data["location"] = {"x": int(x_str), "y": int(y_str)}
+        self.player_data["location"] = donut.location_from_key(room_key)
         self.reset_view()
 
         # Security Guard / Captain players scan the room for warrants on entry.
@@ -477,9 +470,7 @@ class SpaceStationGame(PlayerMovementMixin):
         """As Security Guard or Captain, collect fines and offer Arrest/Let Go for wanted people."""
         elapsed_seconds = get_elapsed_seconds(self.player_data)
 
-        for npc in list(fined_in_room(room_key, self.station_crew)):
-            if is_jailed(npc) or not has_fine(npc):
-                continue
+        for npc in fined_in_room(room_key, self.station_crew):
             resolve_fine_with_guard(
                 npc,
                 game=self,

@@ -320,12 +320,18 @@ def select_ingredient(game, state, args):
         state["selected_ingredient"] = args["name"]
 
 
+MAX_GLASS_POURS = 10
+
+
 @panel_action("mixer")
 def add_ingredient(game, state, args):
     key, categories = _mixer_category(state)
     ingredient = state.get("selected_ingredient")
-    if ingredient in categories[key][1]:
-        state.setdefault("glass", []).append(ingredient)
+    glass = state.setdefault("glass", [])
+    if len(glass) >= MAX_GLASS_POURS:
+        game.alert("Mixer", "The glass is full.", kind="warning")
+    elif ingredient in categories[key][1]:
+        glass.append(ingredient)
 
 
 @panel_action("mixer")

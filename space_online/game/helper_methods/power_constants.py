@@ -1,17 +1,20 @@
 """Shared power system constants and helpers."""
 
+# The Balanced power mode, which is also how a new station starts.
+BALANCED_SYSTEM_LEVELS = {
+    "life_support": 10,
+    "hallway_lighting": 5,
+    "security_systems": 7,
+    "communication_array": 5,
+}
+
 
 def default_station_power():
     """Return a fresh station_power dict for new games or missing save data."""
     return {
         "battery_level": 25.0,
         "solar_charging": False,
-        "system_levels": {
-            "life_support": 10,
-            "hallway_lighting": 5,
-            "security_systems": 7,
-            "communication_array": 5,
-        },
+        "system_levels": dict(BALANCED_SYSTEM_LEVELS),
         "power_mode": "balanced",
         "last_lighting_battery_band": None,
     }

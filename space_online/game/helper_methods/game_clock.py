@@ -11,13 +11,13 @@ against this timer and compute "remaining" as that value minus the current
 ``elapsed_seconds``.
 """
 
-import datetime
+import time
 
 
 def default_game_clock():
     return {
         "elapsed_seconds": 0.0,
-        "last_real_time": datetime.datetime.now().isoformat(),
+        "last_real_time": time.time(),
     }
 
 
@@ -32,17 +32,16 @@ def advance(player_data):
     """
     clock = get_game_clock(player_data)
 
-    now = datetime.datetime.now()
-    try:
-        last_real_time = datetime.datetime.fromisoformat(clock["last_real_time"])
-        delta_seconds = max(0.0, (now - last_real_time).total_seconds())
-    except (TypeError, ValueError):
-        delta_seconds = 0.0
-
-    clock["elapsed_seconds"] = clock.get("elapsed_seconds", 0.0) + delta_seconds
-    clock["last_real_time"] = now.isoformat()
+    now = time.time()
+    delta_seconds = max(0.0, now - clock["last_real_time"])
+    clock["elapsed_seconds"] += delta_seconds
+    clock["last_real_time"] = now
 
     return clock["elapsed_seconds"], delta_seconds
+
+
+def seconds_since_last_tick(player_data):
+    return time.time() - get_game_clock(player_data)["last_real_time"]
 
 
 def get_elapsed_seconds(player_data):

@@ -1,5 +1,6 @@
 """Captain's Station Status: aggregate live station data for the briefing panel."""
 
+from space_online.game.helper_methods.health_bands import health_band
 from space_online.game.helper_methods.door_control import SPECIAL_ROOM_DOORS
 from space_online.game.helper_methods.game_clock import format_elapsed, get_elapsed_seconds
 from space_online.game.helper_methods.npc_movement import has_post
@@ -39,11 +40,7 @@ def crew_health_status(member):
     avg_damage_taken = (total_damage_percent / max_damage_percent) * 100
     overall_health = avg_limb_health * (1 - (avg_damage_taken / 100))
 
-    if overall_health < 40:
-        return "Critical"
-    if overall_health < 75:
-        return "Injured"
-    return "Healthy"
+    return health_band(overall_health)[0]
 
 
 def _battery_band(level):
@@ -142,7 +139,6 @@ def collect_station_status(player_data, station_crew):
         if tile.get("locked"):
             locked_rooms.append(door_info["room_name"])
 
-    botany = player_data.get("botany") or {}
     elapsed_seconds = get_elapsed_seconds(player_data)
     planters = refresh_all_planters_growth(player_data, elapsed_seconds)
     botany_total = len(planters)

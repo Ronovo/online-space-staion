@@ -16,6 +16,24 @@ BOTANY_KEY = "3,-1"
 # Where a new game (or a player who somehow loses their location) starts.
 QUARTERS_LOCATION = {"x": -1, "y": 0}
 
+
+# Map keys are "x,y" strings; locations are {"x", "y"} dicts; tiles are (x, y) tuples.
+def tile_key(x, y):
+    return f"{x},{y}"
+
+
+def location_key(location):
+    return tile_key(location.get("x"), location.get("y"))
+
+
+def location_from_key(key):
+    x, y = key.split(",")
+    return {"x": int(x), "y": int(y)}
+
+
+def location_from_tile(tile):
+    return {"x": tile[0], "y": tile[1]}
+
 # --- Ship map: every tile's name/description/lock state ---
 SHIP_MAP = {
     QUARTERS_KEY: {"name": "Quarters", "desc": "Your personal quarters on the station."},
@@ -172,9 +190,9 @@ def render_map_text():
     xs = []
     ys = []
     for key in SHIP_MAP:
-        x_str, y_str = key.split(",")
-        xs.append(int(x_str))
-        ys.append(int(y_str))
+        location = location_from_key(key)
+        xs.append(location["x"])
+        ys.append(location["y"])
 
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
@@ -186,7 +204,7 @@ def render_map_text():
     for x in range(max_x, min_x - 1, -1):
         row_cells = []
         for y in range(min_y, max_y + 1):
-            key = f"{x},{y}"
+            key = tile_key(x, y)
             if key not in SHIP_MAP:
                 cell = ""
             else:

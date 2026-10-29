@@ -263,6 +263,9 @@ def _selected_prisoner(game, state):
 
 @panel_action("jail")
 def pardon(game, state, args):
+    if is_jailed(game.player_data):
+        game.alert("Pardon", "Prisoners can't sign pardons.", kind="warning")
+        return
     member = _selected_prisoner(game, state)
     if member is None:
         return

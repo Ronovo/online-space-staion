@@ -10,7 +10,6 @@ from space_online.game.helper_methods.stock_market import (
     serialize_companies,
 )
 from space_online.game.helper_methods.npc_movement import location_for_post, pick_random_hallway_location
-from space_online.game.helper_methods.random_events import ensure_job_event
 from space_online.game.helper_methods.game_clock import default_game_clock
 
 NPC_NAMES = [
@@ -121,49 +120,6 @@ def get_jobs_for_department(department):
     return []
 
 
-def permissions_for_job(job):
-    """Return station permission flags for the given job title."""
-    if job == "Captain":
-        return {
-            "security_station": True,
-            "medbay_station": True,
-            "bridge_station": True,
-            "engineering_station": True,
-            "bar_station": True,
-            "hop_station": True,
-            "botany_station": True,
-        }
-    if job == "Head of Personnel":
-        return {
-            "security_station": False,
-            "medbay_station": False,
-            "bridge_station": False,
-            "engineering_station": False,
-            "bar_station": True,
-            "hop_station": True,
-            "botany_station": True,
-        }
-    if job == "Botanist":
-        return {
-            "security_station": False,
-            "medbay_station": False,
-            "bridge_station": False,
-            "engineering_station": False,
-            "bar_station": False,
-            "hop_station": False,
-            "botany_station": True,
-        }
-    return {
-        "security_station": job == "Security Guard",
-        "medbay_station": job == "Doctor",
-        "bridge_station": job == "Captain",
-        "engineering_station": job == "Engineer",
-        "bar_station": job == "Bartender",
-        "hop_station": False,
-        "botany_station": job == "Botanist",
-    }
-
-
 MAX_NAME_LENGTH = 40
 
 
@@ -174,7 +130,7 @@ def _full_limbs():
     }
 
 
-def _crew_record(name, job, credits, location, permissions, *, posted):
+def _crew_record(name, job, credits, location, *, posted):
     """Base NPC dict shared by department heads and staff assistants."""
     job_info = JOBS[job]
     record = {
@@ -196,7 +152,6 @@ def _crew_record(name, job, credits, location, permissions, *, posted):
         "fine_reason": "",
         "in_jail": False,
         "jail_release_at_seconds": None,
-        "permissions": permissions,
     }
     if posted:
         record["on_duty"] = True
@@ -210,14 +165,14 @@ def _generate_station_crew(player_name, job):
     if player_name in available_names:
         available_names.remove(player_name)
 
-    department_heads = {
-        "Captain": {"credits": 10000, "station": "bridge_station"},
-        "Head of Personnel": {"credits": 9000, "station": "hop_station"},
-        "Security Guard": {"credits": 5000, "station": "security_station"},
-        "Doctor": {"credits": 7500, "station": "medbay_station"},
-        "Engineer": {"credits": 2500, "station": "engineering_station"},
-        "Botanist": {"credits": 3000, "station": "botany_station"},
-        "Bartender": {"credits": 3500, "station": "bar_station"},
+    department_head_credits = {
+        "Captain": 10000,
+        "Head of Personnel": 9000,
+        "Security Guard": 5000,
+        "Doctor": 7500,
+        "Engineer": 2500,
+        "Botanist": 3000,
+        "Bartender": 3500,
     }
 
     def _pick_npc_name(fallback_label):
@@ -235,7 +190,6 @@ def _generate_station_crew(player_name, job):
             "Staff Assistant",
             JOBS["Staff Assistant"]["credits"],
             pick_random_hallway_location(),
-            permissions_for_job("Staff Assistant"),
             posted=False,
         )
 
@@ -245,35 +199,21 @@ def _generate_station_crew(player_name, job):
             _crew_record(
                 _pick_npc_name("Captain"),
                 "Captain",
-                department_heads["Captain"]["credits"],
+                department_head_credits["Captain"],
                 location_for_post("Captain"),
-                permissions_for_job("Captain"),
                 posted=True,
             )
         )
-        vacant_roles = [j for j in department_heads if j not in (job, "Captain")]
+        vacant_roles = [j for j in department_head_credits if j not in (job, "Captain")]
         for i in range(len(vacant_roles) + 2):
             station_crew.append(_make_staff_assistant(_pick_npc_name(f"StaffAssistant{i + 1}")))
         return station_crew
 
-    for npc_job, data in department_heads.items():
+    for npc_job, credits in department_head_credits.items():
         if npc_job == job:
             continue
-        permissions = {d["station"]: (j == npc_job) for j, d in department_heads.items()}
-        if npc_job == "Captain":
-            permissions = {d["station"]: True for d in department_heads.values()}
-        elif npc_job == "Head of Personnel":
-            permissions["bar_station"] = True
-            permissions["botany_station"] = True
         station_crew.append(
-            _crew_record(
-                _pick_npc_name(npc_job),
-                npc_job,
-                data["credits"],
-                location_for_post(npc_job),
-                permissions,
-                posted=True,
-            )
+            _crew_record(_pick_npc_name(npc_job), npc_job, credits, location_for_post(npc_job), posted=True)
         )
 
     for i in range(2):
@@ -338,8 +278,6 @@ def create_character(player_name, department, job):
         "ship_map": copy.deepcopy(donut.SHIP_MAP),
         "botany": new_botany(),
         "game_clock": default_game_clock(),
-        "permissions": permissions_for_job(job),
         "notes": [],
     }
-    ensure_job_event(player_data)
     return player_data

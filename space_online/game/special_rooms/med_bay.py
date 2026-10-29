@@ -2,6 +2,7 @@ import math
 
 from space_online.game.helper_methods.oxygen_helper import DOCTOR_REQUIRED_FLOOR
 from space_online.game.helper_methods.alcohol_helper import DOCTOR_SOBER_FLOOR, sober_up_cost
+from space_online.game.helper_methods.health_bands import damage_band, health_band
 from space_online.game.helper_methods.station_status import crew_health_status
 from space_online.game.special_rooms.shared import (
     SpecialRoomBase,
@@ -23,24 +24,6 @@ COST_MULTIPLIERS = {
 NON_LIMB_DAMAGE_TYPES = ("burn", "poison", "oxygen")
 
 
-def _limb_status(health):
-    if health > 75:
-        return "Healthy"
-    if health > 40:
-        return "Injured"
-    return "Critical"
-
-
-def _non_limb_status(damage_val):
-    if damage_val < 10:
-        return "Clear"
-    if damage_val < 30:
-        return "Mild"
-    if damage_val < 60:
-        return "Moderate"
-    return "Severe"
-
-
 def assess_injuries(player_data):
     """Return limb/non-limb damage breakdown and treatment costs."""
     limbs = player_data.get("limbs", {}) or {}
@@ -55,7 +38,7 @@ def assess_injuries(player_data):
         limb_name = limb.replace("_", " ").title()
         points = max(0, 100 - health)
         blunt_points += points
-        status = _limb_status(health)
+        status = health_band(health)[0]
         limb_details.append({
             "key": limb,
             "name": limb_name,
@@ -73,7 +56,7 @@ def assess_injuries(player_data):
         value = damage.get(dtype, 0) or 0
         non_limb[dtype] = {
             "value": value,
-            "status": _non_limb_status(value),
+            "status": damage_band(value)[0],
             "multiplier": COST_MULTIPLIERS[dtype],
             "cost": math.ceil(value * COST_MULTIPLIERS[dtype]) if value > 0 else 0,
         }
@@ -334,11 +317,7 @@ class MedBay(SpecialRoomBase):
             "Doctor",
             exam["message"],
             [
-                (
-                    f"Yes ({exam['total_cost']} credits)",
-                    "doctor_treatment",
-                    {"total_cost": exam["total_cost"], "sober_cost": exam["sober_cost"]},
-                ),
+                (f"Yes ({exam['total_cost']} credits)", "doctor_treatment", None),
                 ("No", None, None),
             ],
         )
@@ -372,8 +351,14 @@ class MedBay(SpecialRoomBase):
 
 
 @choice_handler("doctor_treatment")
-def pay_for_healing(game, total_cost, sober_cost=0):
+def pay_for_healing(game):
+    """Charges what treatment costs now: injuries can get worse while the question is open."""
     player_data = game.player_data
+    exam = build_doctor_exam_message(player_data)
+    if not exam["needs_treatment"]:
+        game.alert("Doctor", exam["message"])
+        return
+    total_cost, sober_cost = exam["total_cost"], exam["sober_cost"]
     if player_data["credits"] < total_cost:
         game.alert(
             "Doctor",
@@ -437,12 +422,6 @@ VITALS_STATUS_COLORS = {"Healthy": "green", "Injured": "yellow", "Critical": "re
 VITALS_DAMAGE_ICONS = {"burn": "🔥", "poison": "☣️", "oxygen": "💨"}
 
 
-def _vitals_color(value, *, damage=False):
-    if damage:
-        return "green" if value < 10 else "yellow" if value < 30 else "orange" if value < 60 else "red"
-    return "green" if value > 75 else "yellow" if value > 40 else "red"
-
-
 @register_panel("crew_vitals", "Crew Vitals Monitor")
 def crew_vitals_panel(game, state):
     crew = []
@@ -457,7 +436,7 @@ def crew_vitals_panel(game, state):
             "status": status,
             "status_color": VITALS_STATUS_COLORS[status],
             "limbs": [
-                {"name": limb.replace("_", " ").title(), "health": health, "color": _vitals_color(health)}
+                {"name": limb.replace("_", " ").title(), "health": health, "color": health_band(health)[1]}
                 for limb, health in limbs.items()
             ],
             "damage": [
@@ -465,7 +444,7 @@ def crew_vitals_panel(game, state):
                     "icon": icon,
                     "name": dtype.title(),
                     "value": damage.get(dtype, 0),
-                    "color": _vitals_color(damage.get(dtype, 0), damage=True),
+                    "color": damage_band(damage.get(dtype, 0))[1],
                 }
                 for dtype, icon in VITALS_DAMAGE_ICONS.items()
             ],

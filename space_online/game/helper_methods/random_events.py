@@ -4,7 +4,7 @@ import random
 
 from space_online.game.helper_methods.npc_movement import find_hall_passersby
 from space_online.game.helper_methods.stock_market import generate_market_tip
-from space_online.game.objects.drinks import DRINKS_MENU
+from space_online.game.objects.botany_items import BOTANY_SEED_IDS
 from space_online.game.objects.items import ALL_ITEMS, add_to_inventory, get_item_definition
 
 HALLWAY_EVENT_CHANCE = 0.20
@@ -25,15 +25,6 @@ CAPTAIN_REQUESTS = [
     "A department head wants a private briefing.",
     "Cargo bay reports a missing shipment and needs orders.",
 ]
-
-
-def ensure_job_event(player_data):
-    """Set job_event_key from the player's current job (create / load / job change)."""
-    job = player_data.get("job")
-    if job:
-        player_data["job_event_key"] = job
-    else:
-        player_data.pop("job_event_key", None)
 
 
 def maybe_trigger_hallway_event(game):
@@ -177,15 +168,6 @@ def _static_events(game):
     ]
 
 
-def _juice_fruit_names():
-    """Fruit names derived from juice entries on the bar menu."""
-    fruits = []
-    for name in DRINKS_MENU:
-        if name.endswith(" Juice"):
-            fruits.append(name[: -len(" Juice")])
-    return fruits
-
-
 def _non_admin_jobs():
     from space_online.game.character_methods.character_creation import JOBS
 
@@ -198,12 +180,13 @@ def _non_admin_jobs():
 
 def build_job_event(game):
     """Build the single job-category event for the player's current role."""
-    ensure_job_event(game.player_data)
-    job = game.player_data.get("job_event_key")
+    job = game.player_data.get("job")
     if not job:
         return None
 
     if job == "Head of Personnel":
+        if game.player_data.get("access_request"):
+            return None
         crew = getattr(game, "station_crew", None) or game.player_data.get("station_crew", [])
         candidates = [npc for npc in crew if npc.get("name") and not npc.get("in_jail")]
         if not candidates:
@@ -291,19 +274,16 @@ def build_job_event(game):
         }
 
     if job == "Botanist":
-        fruits = _juice_fruit_names()
-        if not fruits:
-            return None
-        fruit = random.choice(fruits)
-        article = "an" if fruit[0].lower() in "aeiou" else "a"
-        desc = f"The Bartender needs {article} {fruit.lower()} for juice."
+        crop = random.choice(BOTANY_SEED_IDS).removesuffix("_seeds")
+        article = "an" if crop[0] in "aeiou" else "a"
+        desc = f"The Bartender needs {article} {crop} from the botany lab."
 
         def effect():
-            game.add_note(f"Bartender requested {fruit.lower()} for juice.")
+            game.add_note(f"Bartender requested {article} {crop} from botany.")
 
         return {
             "type": "job",
-            "title": "Juice Fruit Request",
+            "title": "Crop Request",
             "desc": desc,
             "effect": effect,
         }

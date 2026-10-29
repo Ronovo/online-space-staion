@@ -1,5 +1,9 @@
 from space_online.game.objects.items import add_to_inventory, get_item_definition
-from space_online.game.helper_methods.power_constants import SYSTEM_POWER_RATES
+from space_online.game.helper_methods.power_constants import (
+    BALANCED_SYSTEM_LEVELS,
+    LOW_POWER_SYSTEM_LEVELS,
+    SYSTEM_POWER_RATES,
+)
 from space_online.game.helper_methods.oxygen_helper import (
     LIFE_SUPPORT_DAMAGE_BEGIN_TITLE,
     LIFE_SUPPORT_DAMAGE_BEGIN_MESSAGE,
@@ -24,6 +28,7 @@ from space_online.game.special_rooms.shared import (
     room_action,
     text_line,
 )
+from space_online.game.helper_methods.door_control import can_control_door
 from space_online.game.maps.donut import ENGINEERING_KEY
 
 FABRICATABLE_ITEM_IDS = {
@@ -32,10 +37,10 @@ FABRICATABLE_ITEM_IDS = {
 }
 
 SYSTEM_CONTROLS = (
-    {"name": "Life Support", "key": "life_support", "default": 10, "power_draw": "High", "battery": True},
-    {"name": "Hallway Lighting", "key": "hallway_lighting", "default": 5, "power_draw": "Medium", "battery": True},
-    {"name": "Security Systems", "key": "security_systems", "default": 7, "power_draw": "Medium", "battery": False},
-    {"name": "Communication Array", "key": "communication_array", "default": 5, "power_draw": "Low", "battery": False},
+    {"name": "Life Support", "key": "life_support", "power_draw": "High", "battery": True},
+    {"name": "Hallway Lighting", "key": "hallway_lighting", "power_draw": "Medium", "battery": True},
+    {"name": "Security Systems", "key": "security_systems", "power_draw": "Medium", "battery": False},
+    {"name": "Communication Array", "key": "communication_array", "power_draw": "Low", "battery": False},
 )
 
 POWER_MODES = (
@@ -46,9 +51,9 @@ POWER_MODES = (
 )
 
 POWER_MODE_LEVELS = {
-    "balanced": {"life_support": 10, "hallway_lighting": 5, "security_systems": 7, "communication_array": 5},
+    "balanced": BALANCED_SYSTEM_LEVELS,
     "high": {"life_support": 10, "hallway_lighting": 10, "security_systems": 10, "communication_array": 10},
-    "low": {"life_support": 7, "hallway_lighting": 3, "security_systems": 5, "communication_array": 2},
+    "low": LOW_POWER_SYSTEM_LEVELS,
     "emergency": {"life_support": 10, "hallway_lighting": 1, "security_systems": 3, "communication_array": 1},
 }
 
@@ -99,7 +104,7 @@ class Engineering(SpecialRoomBase):
             self.game.alert(
                 "Unauthorized Access",
                 "You do not have authorization to access the Engineering Panel. "
-                "Engineering or Captain clearance required.",
+                "Engineering, HoP or Captain clearance required.",
                 kind="warning",
             )
             return
@@ -107,11 +112,8 @@ class Engineering(SpecialRoomBase):
 
 
 def has_engineering_access(player_data):
-    """True if the player may use engineering panel controls."""
-    return (
-        player_data.get("permissions", {}).get("engineering_station", False)
-        or player_data.get("job") in ("Engineer", "Captain")
-    )
+    """True if the player may use engineering panel controls: the same people who can work its door."""
+    return can_control_door(player_data, ENGINEERING_KEY)
 
 
 def _fabricator_items(category):
@@ -187,7 +189,7 @@ def engineering_panel(game, state):
     levels = power["system_levels"]
     systems = []
     for control in SYSTEM_CONTROLS:
-        value = int(levels.get(control["key"], control["default"]))
+        value = int(levels.get(control["key"], BALANCED_SYSTEM_LEVELS[control["key"]]))
         systems.append({
             **control,
             "value": value,
@@ -234,11 +236,11 @@ def _update_system_level(game, system_key, value):
     if system_key == "life_support":
         if value == 0:
             announce_oxygen_depletion(game)
-        elif life_support_entering_damage_range(previous_value, value):
+            return
+        game.player_data.pop("announcements", None)
+        game.ui["announcement_active"] = False
+        if life_support_entering_damage_range(previous_value, value):
             game.report(LIFE_SUPPORT_DAMAGE_BEGIN_TITLE, LIFE_SUPPORT_DAMAGE_BEGIN_MESSAGE, kind="warning")
-            game.ui["announcement_active"] = False
-        else:
-            game.ui["announcement_active"] = False
 
 
 @panel_action("engineering_panel")

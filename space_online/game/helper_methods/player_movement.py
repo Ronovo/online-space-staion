@@ -2,6 +2,7 @@
 
 import random
 
+from space_online.game.maps import donut
 from space_online.game.helper_methods.alcohol_helper import stumble_chance, fall_chance
 from space_online.game.helper_methods.game_clock import get_elapsed_seconds
 from space_online.game.helper_methods.jail import (
@@ -80,11 +81,11 @@ class PlayerMovementMixin:
         x = self.player_data["location"]["x"] + dx
         y = self.player_data["location"]["y"] + dy
 
-        if f"{x},{y}" not in self.ship_map:
+        if donut.tile_key(x, y) not in self.ship_map:
             self.alert("Error", "You can't go that way!", kind="error")
             return
 
-        self.player_data["location"] = {"x": x, "y": y}
+        self.player_data["location"] = donut.location_from_tile((x, y))
 
         maybe_trigger_hallway_event(self)
 

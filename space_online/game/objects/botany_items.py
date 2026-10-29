@@ -225,9 +225,11 @@ def growth_seconds_to_next_stage(planted_at_seconds, growth_class, elapsed_secon
 def refresh_planter_growth(planter, elapsed_seconds):
     """Update an occupied planter's cached growth_stage from the game clock.
 
-    Applies Miracle Grow's speed bonus and the watering-can survival rule: if
-    a stage tries to advance while the planter hasn't been watered since its
-    last advance, the plant dies and growth freezes at its last stage.
+    Applies Miracle Grow's speed bonus and the watering-can survival rule: each
+    watering carries the plant through one stage. If a stage is due while the
+    planter hasn't been watered since its last advance, the plant dies and
+    growth freezes there. The result is the same however long ago the planter
+    was last looked at.
 
     Returns the current stage (0 if empty).
     """
@@ -251,11 +253,13 @@ def refresh_planter_growth(planter, elapsed_seconds):
             planter["dead"] = True
             planter["growth_stage"] = previous_stage
             return previous_stage
-        planter["growth_stage"] = raw_stage
-        if raw_stage < GROWTH_STAGES:
-            # A further cycle remains; water is used up and must be reapplied.
+        reached = previous_stage + 1
+        planter["growth_stage"] = reached
+        if reached < GROWTH_STAGES:
             planter["watered"] = False
-        return raw_stage
+            if raw_stage > reached:
+                planter["dead"] = True
+        return reached
 
     planter["growth_stage"] = raw_stage
     return raw_stage

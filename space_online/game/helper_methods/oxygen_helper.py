@@ -53,16 +53,21 @@ OXYGEN_DEPLETION_FOLLOWUP_MESSAGE = (
 )
 
 
-def oxygen_damage_for_tick(life_support_level, elapsed_seconds):
-    """Return integer oxygen damage for the elapsed interval at the given life support level.
+def oxygen_damage_for_tick(player_data, life_support_level, elapsed_seconds):
+    """Whole points of oxygen damage for the elapsed interval. The fraction left over carries into the next tick, so
+    short ticks still add up.
 
     Damage scales from 1x at level 4 to 2x at level 0, in +0.25x steps.
     """
     if life_support_level > DAMAGE_THRESHOLD_LEVEL:
         return 0
-    multiplier_x100 = 100 + 25 * (DAMAGE_THRESHOLD_LEVEL - life_support_level)
-    periods = max(elapsed_seconds / float(OXYGEN_TICK_SECONDS), 0)
-    return int((BASE_DAMAGE_PER_TICK * multiplier_x100 * periods) // 100)
+    multiplier = 1 + 0.25 * (DAMAGE_THRESHOLD_LEVEL - life_support_level)
+    timers = player_data.setdefault("damage_timers", {})
+    damage = timers.get("oxygen_damage_acc", 0.0) + BASE_DAMAGE_PER_TICK * multiplier * max(
+        elapsed_seconds / float(OXYGEN_TICK_SECONDS), 0)
+    whole = int(damage)
+    timers["oxygen_damage_acc"] = damage - whole
+    return whole
 
 
 def advance_oxygen_recovery_accumulator(player_data, elapsed_seconds):
@@ -136,7 +141,7 @@ def apply_oxygen_tick(player_data, station_crew, elapsed_seconds, master_elapsed
 
     oxygen_damage_rate = 0
     if apply_damage:
-        oxygen_damage_rate = oxygen_damage_for_tick(life_support_level, elapsed_seconds)
+        oxygen_damage_rate = oxygen_damage_for_tick(player_data, life_support_level, elapsed_seconds)
         apply_damage = oxygen_damage_rate > 0
 
     recovery_amount = 0

@@ -46,6 +46,7 @@ def _load_secret_key(instance_path):
     env_key = os.environ.get("SPACE_ONLINE_SECRET_KEY")
     if env_key:
         return env_key
+    os.makedirs(instance_path, exist_ok=True)
     key_path = os.path.join(instance_path, "secret_key")
     if not os.path.exists(key_path):
         with open(key_path, "w", encoding="utf-8") as f:
@@ -56,7 +57,6 @@ def _load_secret_key(instance_path):
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "instance"))
-    os.makedirs(app.instance_path, exist_ok=True)
     app.config.update(
         DATABASE=os.path.join(app.instance_path, "space_online.sqlite3"),
         SESSION_COOKIE_HTTPONLY=True,
@@ -68,6 +68,7 @@ def create_app(test_config=None):
         app.config["SECRET_KEY"] = _load_secret_key(app.instance_path)
 
     app.teardown_appcontext(db.close_db)
+    os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
     db.init_db(app)
     _register_routes(app)
     return app
@@ -130,6 +131,15 @@ def _login_error(username, user, password):
     return "Incorrect username or password."
 
 
+def _password_error(password, confirm):
+    """Why a new password can't be used, or None."""
+    if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
+        return f"Passwords must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters."
+    if password != confirm:
+        return "Passwords do not match."
+    return None
+
+
 def _portfolio_user(account):
     """A new account linked to a portfolio account and named after it. Its password is random and never shown,
     so logging in with the portfolio account is the only way in."""
@@ -150,8 +160,10 @@ def _answer_hash(answer):
 
 
 def _render_screen(view):
+    """The screen's HTML, and the JSON the page script reads: its hash, title, alerts and any open choice."""
     html = render_template("game/screen.html", view=view)
-    return html, hashlib.sha1(html.encode("utf-8")).hexdigest()[:16]
+    screen_hash = hashlib.sha1(html.encode("utf-8")).hexdigest()[:16]
+    return html, {"hash": screen_hash, "title": view["title"], "alerts": view["alerts"], "choice": view["choice"]}
 
 
 def _register_routes(app):
@@ -216,21 +228,16 @@ def _register_routes(app):
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
+        username = request.form.get("username", "").strip()
+        question = request.form.get("question", "")
         if request.method == "POST":
-            username = request.form.get("username", "").strip()
             password = request.form.get("password", "")
-            confirm = request.form.get("confirm_password", "")
-            question = request.form.get("question", "")
             answer = request.form.get("answer", "")
-            error = None
             if not USERNAME_PATTERN.match(username):
                 error = "Usernames are 3-32 characters: letters, numbers, dot, dash, or underscore."
-            elif not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
-                error = f"Passwords must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters."
-            elif password != confirm:
-                error = "Passwords do not match."
             else:
-                error = security_questions.problem(question, answer)
+                error = (_password_error(password, request.form.get("confirm_password", ""))
+                         or security_questions.problem(question, answer))
             if error is None:
                 user_id = db.create_user(username, generate_password_hash(password))
                 if user_id is None:
@@ -240,9 +247,8 @@ def _register_routes(app):
                     _log_in(db.get_user(user_id))
                     return redirect(url_for("new_character"))
             flash(error, "error")
-            return render_template("register.html", username=username, question=question,
-                                   questions=security_questions.QUESTIONS)
-        return render_template("register.html", username="", question="", questions=security_questions.QUESTIONS)
+        return render_template("register.html", username=username, question=question,
+                               questions=security_questions.QUESTIONS)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -269,12 +275,8 @@ def _register_routes(app):
             username, app.config["SECRET_KEY"].encode("utf-8"))
         if "answer" in request.form:
             password = request.form.get("password", "")
-            error = None
-            if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
-                error = f"Passwords must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters."
-            elif password != request.form.get("confirm_password", ""):
-                error = "Passwords do not match."
-            else:
+            error = _password_error(password, request.form.get("confirm_password", ""))
+            if error is None:
                 tries = db.count_reset_try(user["id"], time.time()) if user else 0
                 if tries is None or tries > security_questions.MAX_RESET_FAILURES:
                     error = "Too many wrong answers. Try again in 15 minutes."
@@ -343,19 +345,15 @@ def _register_routes(app):
         view = _run_game(session["user_id"])
         if view is None:
             return redirect(url_for("new_character"))
-        html, screen_hash = _render_screen(view)
-        initial = {
-            "hash": screen_hash,
-            "title": view["title"],
-            "alerts": view["alerts"],
-            "choice": view["choice"],
-        }
+        html, initial = _render_screen(view)
         return render_template("play.html", screen_html=html, initial_state=initial)
 
     @app.route("/api/act", methods=["POST"])
     @login_required
     def act():
-        payload = request.get_json(silent=True) or {}
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            payload = {}
         action = payload.get("action")
         view = _run_game(
             session["user_id"],
@@ -367,13 +365,7 @@ def _register_routes(app):
         if view["redirect"]:
             return jsonify({"redirect": url_for(view["redirect"])})
 
-        html, screen_hash = _render_screen(view)
-        response = {
-            "hash": screen_hash,
-            "title": view["title"],
-            "alerts": view["alerts"],
-            "choice": view["choice"],
-        }
-        if screen_hash != payload.get("hash"):
+        html, response = _render_screen(view)
+        if response["hash"] != payload.get("hash"):
             response["html"] = html
         return jsonify(response)

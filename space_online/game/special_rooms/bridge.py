@@ -1,8 +1,7 @@
 import random
 
-from space_online.game.character_methods.character_creation import JOBS, permissions_for_job
+from space_online.game.character_methods.character_creation import JOBS
 from space_online.game.helper_methods.npc_movement import reassign_npc_post
-from space_online.game.helper_methods.random_events import ensure_job_event
 from space_online.game.helper_methods.ui_panels import (
     choice_handler,
     current_feedback,
@@ -138,18 +137,22 @@ class Bridge(SpecialRoomBase):
             return
 
         job = request["requested_job"]
+        requester = request.get("requester_name")
+        for_crew = requester and requester != self.player_data.get("name")
+        whose = f"{requester}'s" if for_crew else "your"
         if random.random() < 0.5:
             ok, solar_activated, error = apply_access_request_job(self.game, job)
             if not ok:
                 self.game.alert("Head of Personnel", error)
             else:
-                message = f"The HoP approved your request. You are now {job}."
+                now = f"{requester} is now {job}." if for_crew else f"You are now {job}."
+                message = f"The HoP approved {whose} request. {now}"
                 if solar_activated:
                     message += " Solar arrays are now active."
                 self.game.alert("Head of Personnel", message)
         else:
             self.player_data.pop("access_request", None)
-            self.game.alert("Head of Personnel", f"The HoP denied your request for {job}.")
+            self.game.alert("Head of Personnel", f"The HoP denied {whose} request for {job}.")
 
     @room_action(station="captain_station")
     def show_station_status(self):
@@ -182,7 +185,6 @@ def _grant_job(member, job):
     member["job"] = job
     member["department"] = job_info["department"]
     member["subdepartment"] = job_info["subdepartment"]
-    member["permissions"] = permissions_for_job(job)
 
 
 def _activate_solar_for_engineer(game, job):
@@ -208,7 +210,6 @@ def apply_access_request_job(game, job):
 
     request = player_data.get("access_request") or {}
     requester_name = request.get("requester_name")
-    solar_activated = _activate_solar_for_engineer(game, job)
 
     # NPC-submitted request (HoP job event): update that crew member.
     if requester_name and requester_name != player_data.get("name"):
@@ -218,12 +219,11 @@ def apply_access_request_job(game, job):
             return False, False, "The requester is no longer on the station. Request cleared."
         _grant_job(npc, job)
         reassign_npc_post(npc, job)
-        return True, solar_activated, None
+        return True, _activate_solar_for_engineer(game, job), None
 
     _grant_job(player_data, job)
-    ensure_job_event(player_data)
     player_data.pop("access_request", None)
-    return True, solar_activated, None
+    return True, _activate_solar_for_engineer(game, job), None
 
 
 @register_panel("access_request", "Access Control")
@@ -308,7 +308,7 @@ def deny(game, state, args):
 
 
 def _player_is_captain(player_data):
-    return player_data.get("job") == "Captain" or player_data.get("subdepartment") == "Captain"
+    return player_data.get("subdepartment") == "Captain"
 
 
 def _assignable_rows(game):
@@ -427,7 +427,6 @@ def assign_role(game, crew_index, job):
     _grant_job(member, job)
 
     if crew_index == PLAYER_CREW_INDEX:
-        ensure_job_event(game.player_data)
         _activate_solar_for_engineer(game, job)
         game.close_panel("job_assignment")
         return

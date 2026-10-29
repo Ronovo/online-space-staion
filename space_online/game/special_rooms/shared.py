@@ -30,14 +30,14 @@ def room_lighting_chrome(player_data):
     return lighting_style(level, place="room")
 
 
+MAX_NOTES = 200
+
+
 def add_note(player_data, text):
-    """Append a timestamped note to player_data['notes']."""
-    if "notes" not in player_data:
-        player_data["notes"] = []
-    player_data["notes"].append({
-        "timestamp": datetime.datetime.now().isoformat(),
-        "text": text,
-    })
+    """Append a timestamped note, dropping the oldest once there are MAX_NOTES."""
+    notes = player_data["notes"]
+    notes.append({"timestamp": datetime.datetime.now().isoformat(), "text": text})
+    del notes[:-MAX_NOTES]
 
 
 def button(label, action, **args):

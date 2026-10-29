@@ -9,6 +9,7 @@ so this module never reads the wall clock itself.
 import random
 
 from space_online.game.maps import donut
+from space_online.game.helper_methods.door_control import can_control_door
 from space_online.game.helper_methods.npc_movement import (
     has_post,
     location_for_post,
@@ -22,26 +23,17 @@ BRIBE_MIN_CREDITS = 5
 BRIBE_MAX_CREDITS = 50
 FINE_REFUSE_CHANCE = 0.15
 
-# Player jobs that can scan warrants and offer Arrest / Let Go.
-PLAYER_ARREST_JOBS = frozenset({"Security Guard", "Captain"})
-
-
 def can_player_arrest(player_data):
-    return player_data.get("job") in PLAYER_ARREST_JOBS
-
-
-def _location_dict_from_key(key):
-    x_str, y_str = key.split(",")
-    return {"x": int(x_str), "y": int(y_str)}
+    """Whoever can work the Security door can scan warrants and offer Arrest / Let Go."""
+    return can_control_door(player_data, donut.SECURITY_KEY)
 
 
 def security_room_location():
-    return _location_dict_from_key(donut.SECURITY_KEY)
+    return donut.location_from_key(donut.SECURITY_KEY)
 
 
 def security_hallway_location():
-    tile = donut.SPECIAL_ROOM_HALLWAY[donut.SECURITY_KEY]
-    return {"x": tile[0], "y": tile[1]}
+    return donut.location_from_tile(donut.SPECIAL_ROOM_HALLWAY[donut.SECURITY_KEY])
 
 
 def warrant_reason_text(member, default="No reason on file"):

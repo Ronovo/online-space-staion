@@ -1,6 +1,5 @@
 """Stock market simulation, master-timer cycles, and the quarters trading terminal."""
 
-import math
 import random
 
 from space_online.game.helper_methods.game_clock import get_elapsed_seconds
@@ -99,9 +98,9 @@ def default_stock_market_state():
     }
 
 
-def truncate_credits(value):
-    """Truncate credits to 2 decimal places (toward zero, never round up)."""
-    return math.trunc(value * 100) / 100
+def round_credits(value):
+    """Credits are kept to the cent, rounded."""
+    return round(value, 2)
 
 
 def record_trade(player_data, cycle, side, company_name, shares, price, total):
@@ -397,7 +396,7 @@ def buy(game, state, args):
         game.alert("Transaction Failed", "Not enough credits for this purchase.", kind="error")
         return
 
-    player_data["credits"] = truncate_credits(player_data["credits"] - total_cost)
+    player_data["credits"] = round_credits(player_data["credits"] - total_cost)
     holdings = player_data.setdefault("stock_holdings", {})
     holdings[company.name] = holdings.get(company.name, 0) + shares
     record_trade(
@@ -429,7 +428,7 @@ def sell(game, state, args):
         return
 
     total_value = shares * company.current_value
-    player_data["credits"] = truncate_credits(player_data["credits"] + total_value)
+    player_data["credits"] = round_credits(player_data["credits"] + total_value)
     holdings[company.name] -= shares
     if holdings[company.name] <= 0:
         del holdings[company.name]
