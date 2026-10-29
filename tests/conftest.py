@@ -1,7 +1,7 @@
 import pytest
 
 from space_online.webapp import create_app
-from space_online.webapp.security_questions import QUESTIONS
+from ronovo_portfolio_auth.security_questions import QUESTIONS
 
 CSRF = "test-csrf-token"
 

@@ -56,9 +56,7 @@ OXYGEN_DEPLETION_FOLLOWUP_MESSAGE = (
 def oxygen_damage_for_tick(life_support_level, elapsed_seconds):
     """Return integer oxygen damage for the elapsed interval at the given life support level.
 
-    Damage scale (per 15s tick): level 4 = normal (1x), each step down +0.25x.
-    Level 4→0 multipliers: 1.00, 1.25, 1.50, 1.75, 2.00 — applied as integers.
-    Base 4 so each +0.25x step is a distinct integer (4, 5, 6, 7, 8).
+    Damage scales from 1x at level 4 to 2x at level 0, in +0.25x steps.
     """
     if life_support_level > DAMAGE_THRESHOLD_LEVEL:
         return 0
@@ -110,7 +108,7 @@ def _oxygen_depletion_grace_active(player_data, master_elapsed_seconds):
 
 
 def apply_oxygen_tick(player_data, station_crew, elapsed_seconds, master_elapsed_seconds=None):
-    """Apply oxygen damage or recovery for one battery tick.
+    """Apply oxygen damage or recovery for one master clock tick.
 
     ``elapsed_seconds`` is the real-time delta since the previous tick (used
     to scale damage/recovery); ``master_elapsed_seconds`` is the current

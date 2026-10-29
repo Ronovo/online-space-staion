@@ -212,7 +212,6 @@ def confirm_fine(game, state, args):
         game.alert("Invalid Amount", "Fine amount must be greater than zero.", kind="warning")
         return
 
-    # Stack additional fines onto any existing unpaid amount.
     try:
         existing = float(member.get("fine_amount", 0) or 0)
     except (TypeError, ValueError):
@@ -272,7 +271,6 @@ def pardon(game, state, args):
     release_member(member, is_player=is_player, game=game, show_message=False)
     game.alert("Pardon", f"{name} has been pardoned and released from jail.")
     if is_player:
-        # Player is no longer jailed; leave Security into the hallway.
         member["location"] = security_hallway_location()
         game.reset_view()
 

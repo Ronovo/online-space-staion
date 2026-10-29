@@ -36,9 +36,9 @@ ROOM_VISIT_TICKS = 2
 NPC_EVENT_CHANCE = 0.15
 
 # Off-duty posted NPC three-way weights (sum to 1.0).
-GOAL_WEIGHT_RETURN = NPC_AUTO_RETURN_CHANCE  # 0.15
-GOAL_WEIGHT_ROOM = STAFF_ROOM_VISIT_CHANCE  # 0.25
-GOAL_WEIGHT_WANDER = 1.0 - GOAL_WEIGHT_RETURN - GOAL_WEIGHT_ROOM  # 0.60
+GOAL_WEIGHT_RETURN = NPC_AUTO_RETURN_CHANCE
+GOAL_WEIGHT_ROOM = STAFF_ROOM_VISIT_CHANCE
+GOAL_WEIGHT_WANDER = 1.0 - GOAL_WEIGHT_RETURN - GOAL_WEIGHT_ROOM
 
 # Rooms NPCs may visit (not Quarters).
 VISITABLE_ROOM_KEYS = tuple(
@@ -56,17 +56,14 @@ def leave_post_chance_for(npc):
 # --- Lookups -----------------------------------------------------------
 
 def has_post(npc):
-    """Return True if this NPC's job is tied to a station post/room."""
     return npc.get("job") in JOB_POST_KEY
 
 
 def post_key_for_job(job):
-    """Return the donut room key for a job's post, or None if it has no post."""
     return JOB_POST_KEY.get(job)
 
 
 def npcs_for_job(station_crew, job_name):
-    """Return every NPC currently holding job_name."""
     return [npc for npc in station_crew if npc.get("job") == job_name]
 
 
@@ -381,7 +378,6 @@ def _enter_room(npc, room_key, game=None, player_data=None, station_crew=None):
     npc["location"] = _location_dict_from_key(room_key)
     npc["room_visit_remaining"] = ROOM_VISIT_TICKS
 
-    # Security Guards check warrants when they enter a room.
     if npc.get("job") == "Security Guard" and station_crew is not None:
         from space_online.game.helper_methods.game_clock import get_elapsed_seconds
         from space_online.game.helper_methods.jail import (

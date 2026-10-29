@@ -63,7 +63,6 @@ class PlayerMovementMixin:
         return True
 
     def move_direction(self, direction):
-        """Move in the specified direction with random event chance"""
         if direction not in DIRECTION_STEPS:
             return
 
@@ -92,9 +91,7 @@ class PlayerMovementMixin:
         if is_jailed(self.player_data):
             return
 
-        # Unconditional (not gated by the random-event roll above): if a
-        # wandering NPC happens to be standing on the player's new tile,
-        # they cross paths in the hallway — and security may arrest.
+        # Hallway passers-by are checked on every move.
         for npc in find_hall_passersby(self.player_data, self.station_crew):
             if self._handle_hallway_security_encounter(npc):
                 if is_jailed(self.player_data):

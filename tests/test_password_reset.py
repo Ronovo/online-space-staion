@@ -1,7 +1,3 @@
-import sqlite3
-
-from werkzeug.security import generate_password_hash
-
 from tests.conftest import QUESTION, post, register
 
 
@@ -42,17 +38,3 @@ def test_unknown_usernames_get_a_steady_stand_in_question(client):
     first = post(client, "/reset-password", username="ghost").data
     assert first == post(client, "/reset-password", username="ghost").data
     assert b"That answer is wrong" in reset(client, "ghost", "anything").data
-
-
-def test_old_accounts_set_a_question_after_logging_in(app, client):
-    db = sqlite3.connect(app.config["DATABASE"])
-    db.execute("INSERT INTO users (username, password_hash, created_at) VALUES ('old', ?, 'now')",
-               (generate_password_hash("hunter22"),))
-    db.commit()
-    db.close()
-    res = post(client, "/login", username="old", password="hunter22")
-    assert res.location.endswith("/security-question")
-    res = post(client, "/security-question", question=QUESTION, answer="rex")
-    assert res.status_code == 302 and res.location.endswith("/")
-    post(client, "/logout")
-    assert post(client, "/login", username="old", password="hunter22").location.endswith("/")

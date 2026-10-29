@@ -9,7 +9,7 @@ FOOD_ITEMS = {
         "attributes": {},
         "actions": ["examine", "eat", "drop"],
     },
-    "energy_bar": {  # From random event
+    "energy_bar": {
         "id": "energy_bar",
         "name": "Energy Bar",
         "description": "A dense, nutrient-rich bar. Tastes like cardboard.",
@@ -17,7 +17,7 @@ FOOD_ITEMS = {
         "attributes": {},
         "actions": ["examine", "eat", "drop"],
     },
-    "emergency_rations": {  # From locker
+    "emergency_rations": {
         "id": "emergency_rations",
         "name": "Emergency Rations",
         "description": "Standard emergency food supply. Use only when necessary.",

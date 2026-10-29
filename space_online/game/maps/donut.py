@@ -1,18 +1,10 @@
-# game/maps/donut.py
 """
 The "Donut" station layout: a hollow square ring of hallways with special
 rooms sprouting off of it (Bridge, MedBay, Security, Engineering, Bar,
 Botany), plus the player's Quarters attached at the hallway junction.
-
-This module is the single source of truth for this map's coordinates. Other
-modules should import the constants/helpers below instead of hardcoding
-"x,y" strings or coordinate math of their own.
 """
 
 # --- Special room coordinate keys ---
-# Defined once here so every file that needs a room's map key (door control,
-# room UI modules, save/load code, etc.) imports the same value instead of
-# retyping the literal string.
 QUARTERS_KEY = "-1,0"
 BRIDGE_KEY = "6,0"
 MEDBAY_KEY = "0,6"
@@ -39,20 +31,17 @@ SHIP_MAP = {
     "0,4": {"name": "East Hallway", "desc": "A long hallway stretching east."},
     "0,5": {"name": "East End", "desc": "The eastern end of the hallway. The medbay is nearby."},
 
-    # Northeast Corridors
     "5,1": {"name": "Northeast Hallway", "desc": "A hallway connecting the north and east corridors."},
     "5,2": {"name": "Northeast Hallway", "desc": "A hallway connecting the north and east corridors."},
     "5,3": {"name": "Engineering Bay Entrance", "desc": "This hallway leads to the Engineering Bay."},
     "5,4": {"name": "Northeast Hallway", "desc": "A hallway connecting the north and east corridors."},
     "5,5": {"name": "Northeast Corner", "desc": "The far corner of the station. Security is nearby."},
 
-    # East Section
     "4,5": {"name": "East Section", "desc": "A hallway along the eastern side of the station."},
     "3,5": {"name": "East Section", "desc": "A hallway along the eastern side of the station."},
     "2,5": {"name": "East Section", "desc": "A hallway along the eastern side of the station."},
     "1,5": {"name": "East Section", "desc": "A hallway connecting back to the main hallways."},
 
-    # Special room tiles
     BRIDGE_KEY: {"name": "Bridge", "desc": "The control center of the station. The door is unlocked.", "locked": False},
     MEDBAY_KEY: {"name": "MedBay", "desc": "The medical facility of the station. The door is unlocked.", "locked": False},
     SECURITY_KEY: {"name": "Security", "desc": "The security center of the station. The door is unlocked.", "locked": False},
@@ -84,8 +73,6 @@ SPECIAL_ROOM_HALLWAY = {
 }
 
 # Hallway tiles that replace the default N/S/E/W grid with a room button + corridor dirs.
-# room_grid / dir grids are (row, column) for nav_frame.grid.
-# check_available: only pack corridor dirs when get_available_directions allows them.
 HALLWAY_SPECIAL_NAV = (
     {
         "hallway": SPECIAL_ROOM_HALLWAY[BRIDGE_KEY],
@@ -143,25 +130,21 @@ def get_available_directions(x, y):
     """
     north = south = east = west = False
 
-    # North hallway section (0-5, 0)
     if y == 0 and x < 5:
         north = True
     if y == 0 and x > 0:
         south = True
 
-    # East hallway section (0, 0-5)
     if x == 0 and y < 5:
         east = True
     if x == 0 and y > 0:
         west = True
 
-    # North end - can go east
     if x == 5 and y < 5:
         east = True
     if x == 5 and y > 0:
         west = True
 
-    # East end - can go north
     if y == 5 and x < 5:
         north = True
     if y == 5 and x > 0:

@@ -35,17 +35,14 @@ class Company:
         self.owned_shares = 0
         
     def update_value(self):
-        """Update the company's stock value"""
         self.previous_value = self.current_value
         
-        # Random change between -10% and +10%
         change = random.uniform(-0.10, 0.10)
         
         self.current_value = max(1.0, self.current_value * (1 + change))
         
         self.price_history.append(self.current_value)
         
-        # Limit price history to most recent 50 cycles
         if len(self.price_history) > 50:
             self.price_history.pop(0)
 
@@ -74,14 +71,11 @@ def serialize_companies(companies):
 
 def apply_companies_from_save(companies, company_data_list):
     """Restore live company objects from saved player_data."""
-    if not company_data_list or len(company_data_list) != len(companies):
-        return
-
-    for i, company_data in enumerate(company_data_list):
-        companies[i].name = company_data["name"]
-        companies[i].current_value = company_data["current_value"]
-        companies[i].previous_value = company_data["previous_value"]
-        companies[i].price_history = company_data["price_history"]
+    for company, company_data in zip(companies, company_data_list, strict=True):
+        company.name = company_data["name"]
+        company.current_value = company_data["current_value"]
+        company.previous_value = company_data["previous_value"]
+        company.price_history = company_data["price_history"]
 
 
 def sync_holdings_to_companies(companies, stock_holdings):

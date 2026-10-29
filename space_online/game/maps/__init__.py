@@ -1,9 +1,7 @@
-# game/maps/__init__.py
 """
 Station layout modules live here, one file per map (e.g. donut.py).
 
-Each map module is expected to expose this interface so new maps can be
-added without touching the game code that consumes them:
+Each map module exposes this interface:
 
     SHIP_MAP             -- dict of "x,y" -> {"name", "desc", ["locked"]}
     SPECIAL_ROOM_TILES    -- dict of "x,y" -> special room name (door tiles)

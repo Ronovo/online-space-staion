@@ -14,7 +14,6 @@ from space_online.game.objects.botany_items import (
 from space_online.game.objects.items import (
     HAND_SIDES,
     add_to_inventory,
-    ensure_hands,
     format_inventory_label,
     get_item_definition,
 )
@@ -60,11 +59,8 @@ def _empty_planter():
     }
 
 
-def ensure_botany(player_data):
-    """Create the botany planters on first use."""
-    if "botany" not in player_data:
-        player_data["botany"] = {"planters": [_empty_planter() for _ in range(TOTAL_PLANTERS)]}
-    return player_data["botany"]
+def new_botany():
+    return {"planters": [_empty_planter() for _ in range(TOTAL_PLANTERS)]}
 
 
 class Botany(SpecialRoomBase):
@@ -181,13 +177,13 @@ def _planter_card(planter, index, elapsed_seconds, allow_harvest):
 def planter_row_panel(game, state):
     row = state["row"]
     allow_harvest = state["allow_harvest"]
-    planters = ensure_botany(game.player_data)["planters"]
+    planters = game.player_data["botany"]["planters"]
     elapsed_seconds = get_elapsed_seconds(game.player_data)
     start = row * PLANTERS_PER_ROW
 
     hand_buttons = []
     if allow_harvest:
-        hands = ensure_hands(game.player_data)
+        hands = game.player_data["hands"]
         for side, label in HAND_SIDES:
             held = hands.get(side)
             hand_buttons.append({
@@ -222,7 +218,7 @@ def _row_planter(game, state, args):
     start = state["row"] * PLANTERS_PER_ROW
     if not (start <= index < start + PLANTERS_PER_ROW):
         return None, None
-    return index, ensure_botany(game.player_data)["planters"][index]
+    return index, game.player_data["botany"]["planters"][index]
 
 
 @panel_action("planter_row")
@@ -240,10 +236,6 @@ def harvest(game, state, args):
         return
 
     produces_id = planter.get("produces")
-    if not produces_id and planter.get("seed_id"):
-        seed_def = get_item_definition(planter["seed_id"])
-        if seed_def:
-            produces_id = (seed_def.get("attributes") or {}).get("produces")
 
     produce = get_item_definition(produces_id) if produces_id else None
     if not produce:
@@ -254,7 +246,7 @@ def harvest(game, state, args):
     produce["quantity"] = yield_multiplier
     add_to_inventory(game.player_data, produce)
     plant_name = planter.get("plant") or produce.get("name", "produce")
-    ensure_botany(game.player_data)["planters"][planter_index] = _empty_planter()
+    game.player_data["botany"]["planters"][planter_index] = _empty_planter()
     game.add_note(
         f"Harvested {yield_multiplier}x {produce.get('name', plant_name)} from planter {planter_index + 1}."
     )
@@ -269,7 +261,7 @@ def use_hand(game, state, args):
     if planter is None:
         return
     hand_side = args["side"]
-    hands = ensure_hands(game.player_data)
+    hands = game.player_data["hands"]
     if hand_side not in hands:
         return
     item = hands.get(hand_side)
@@ -277,7 +269,7 @@ def use_hand(game, state, args):
         game.alert("Empty Hand", f"Your {hand_side} hand is empty.")
         return
 
-    planters = ensure_botany(game.player_data)["planters"]
+    planters = game.player_data["botany"]["planters"]
     item_id = item.get("id")
     item_name = item.get("name", "item")
 
@@ -356,7 +348,7 @@ def use_hand(game, state, args):
 
 @choice_handler("clear_planter")
 def clear_planter(game, index, item_name):
-    planters = ensure_botany(game.player_data)["planters"]
+    planters = game.player_data["botany"]["planters"]
     if 0 <= index < len(planters):
         planters[index] = _empty_planter()
         game.add_note(f"Cleared planter {index + 1} with the {item_name}.")

@@ -512,7 +512,6 @@ def add_market_knowledge(game):
 
 
 def station_announcement(game):
-    """Display a random station announcement."""
     announcements = [
         "Reminder to all crew: safety protocols must be followed at all times.",
         "The cafeteria is now serving special meal rations.",
@@ -572,7 +571,7 @@ def heal_damage_type(game, damage_key, label, min_heal, max_heal):
 
 
 def medical_bot_heal(game):
-    """Heal one random damaged limb or damage type by 5–10%."""
+    """Heal one random damaged limb or damage type by 1-5%."""
     candidates = []
 
     for limb, health in game.player_data.get("limbs", {}).items():
@@ -599,7 +598,6 @@ def medical_bot_heal(game):
 
 
 def bot_moves_by(game):
-    """A maintenance, security, or medical bot passes by."""
     bot = random.choice(["maintenance", "security", "medical"])
 
     if bot == "maintenance":
@@ -673,7 +671,6 @@ def add_snack(game):
 
 
 def vending_machine_malfunction(game):
-    """One of three vending machine outcomes."""
     outcome = random.choice(["spit_out", "stuck", "free_snack"])
 
     if outcome == "spit_out":

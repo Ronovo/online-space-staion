@@ -2,12 +2,7 @@
 
 
 def default_station_power():
-    """Return a fresh station_power dict for new games or missing save data.
-
-    Discharge/charge no longer track their own wall-clock timestamp; the
-    universal master game clock (see ``game_clock.py``) supplies the elapsed
-    time used for these calculations.
-    """
+    """Return a fresh station_power dict for new games or missing save data."""
     return {
         "battery_level": 25.0,
         "solar_charging": False,

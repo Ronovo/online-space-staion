@@ -5,10 +5,10 @@ accounts, where each account owns one character whose progress is saved on the s
 
 ## Core Features
 
-- **Accounts**: Register with a username, a password and a security question; each account owns exactly one character. **Forgot password?** resets the password with the security answer, and five wrong answers lock resets for 15 minutes.
+- **Accounts**: Register with a username, a password and a security question; each account owns exactly one character. **Forgot password?** resets the password with the security answer and logs the account out of every other browser; five wrong answers lock resets for 15 minutes. A question can't be changed once it is set, and five wrong passwords in a row lock a username's logins for a minute.
 - **Character System**: Create a character with unique jobs (Staff Assistant to Captain), each with special access and starting credits
 - **Station Navigation**: Explore a donut-shaped ring of hallways and department rooms with random events
-- **Inventory System**: Carry items, store them in your quarters locker, and examine, read, drop, or drink them
+- **Inventory System**: Carry items, store them in your quarters locker, hold them in your hands, and examine, read, use, eat, drink or drop them
 - **Health System**: Track limb damage plus burns, poison, and oxygen; seek treatment in MedBay
 - **Crew Roster**: Start alongside procedurally staffed NPC crew (department heads and assistants)
 - **Persistent Progress**: Your character's progress is saved to the server after every action. Deleting the character erases that progress so you can roll a new one
@@ -25,13 +25,15 @@ accounts, where each account owns one character whose progress is saved on the s
 ### Medical System
 - Health tracking for limbs, burns, poison, and oxygen
 - Paid medical treatment and health assessments in MedBay
-- Free self-treatment and crew vitals monitoring for Doctors
+- Free limb treatment and crew vitals monitoring for Doctors, the Captain and the Head of Personnel
 - Oxygen damage when life support is underpowered, with emergency revive if it reaches critical levels
 
 ### Security System
 - Access control for restricted areas
 - Door locking and unlocking for authorized personnel
 - Crew manifest for Security staff
+- Warrants, fines and jail time: Security Guards arrest crew with warrants, fines can be paid or bribed down,
+  and the Captain can pardon
 
 ### Stock Market
 - Real-time market simulation with automatic updates
@@ -48,8 +50,9 @@ accounts, where each account owns one character whose progress is saved on the s
 
 ### Botany System
 - Seed collection from the botanist station
-- Plant seeds across multiple planters
-- Planter status monitoring
+- Plant seeds across multiple planters, and water them before each growth stage or they die
+- Planter status monitoring, Miracle Grow and Plentiful Harvest
+- Harvesting needs a Trowel or Chainsaw in your hands
 - Special access for Botanists
 
 ### Life Support
@@ -64,7 +67,7 @@ accounts, where each account owns one character whose progress is saved on the s
 - Captain and HoP door control for the Bridge
 
 ### Engineering
-- Fabricator for creating tools, books, and components
+- Fabricator for creating tools and books
 - Full power management panel for authorized staff
 
 ## Running it
@@ -90,13 +93,13 @@ Open http://127.0.0.1:5000, register an account, and create your character.
 | `PORT` | `5000` | Port to listen on. |
 | `SPACE_ONLINE_SECRET_KEY` | generated | Session signing key. If unset, one is generated once into `instance/secret_key`. |
 
-With `PORTFOLIO_SSO_URL` (the portfolio's address, such as `http://ronovo.lan`) and `PORTFOLIO_SSO_PUBLIC_KEY`
+With `PORTFOLIO_SSO_URL` (the portfolio's address) and `PORTFOLIO_SSO_PUBLIC_KEY`
 (printed by the portfolio's `python sso.py`) set, the login page offers to log in with a portfolio account. It
 reads **Log In as** and the portfolio username when this browser is logged in to the portfolio. The first
 portfolio login here asks whether to link an account the player already has, by logging in to it once, or to
 make a new one named after the portfolio username, with a number added if that name is taken. Every later
-portfolio login from any device opens the linked account. A new account has no password of its own, so the
-portfolio is the only way into it. Without those two settings the app runs on its own.
+portfolio login from any device opens the linked account. A new account starts with no password of its own, so
+the portfolio is the way into it. Without those two settings the app runs on its own.
 
 Accounts and characters are stored in `instance/space_online.sqlite3`, next to `run_server.py`. The
 `instance/` folder is the game's only data: back it up to keep your players, delete it to start fresh.
@@ -112,6 +115,18 @@ docker run -d -p 5000:5000 -v space-online-data:/app/instance space-station-expl
 
 Set `SPACE_ONLINE_SECRET_KEY` with `-e` so logins survive the key file being lost.
 
+On every start the container runs `docker/git-sync.sh` before the game. It fetches the latest commit on GitHub
+`main`, so a pushed commit goes live on the next restart without rebuilding the image. When that commit hasn't
+been built yet it reinstalls `requirements.txt` first, and a failed install is tried again on the next start. If
+GitHub can't be reached the game starts on the code it already has.
+
+| Variable | What it does | Default in the image |
+| --- | --- | --- |
+| `REPO_URL` | The repo to pull. Set it empty to run exactly what is in the image. | This repo on GitHub |
+| `REPO_BRANCH` | Branch to pull | `main` |
+| `SYNC_DIR` | Folder the code is pulled into | The app folder |
+| `BUILD_CMD` | Runs after pulling a commit that hasn't been built yet | `pip install -r requirements.txt` |
+
 ## Tests
 
 ```sh
@@ -119,8 +134,9 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The tests cover accounts, character creation, playing and saving, and the core game
-rules (jobs, door access, inventory).
+The tests cover accounts, password resets, portfolio login, character creation, playing and saving, and the
+core game rules (jobs, door access, inventory). `requirements-dev.txt` includes `requirements.txt`, which the
+portfolio login tests need.
 
 ## Project layout
 
@@ -130,6 +146,10 @@ space_online/webapp/     Flask app: routes, accounts, SQLite storage, templates,
 space_online/game/       The game itself: station map, rooms, items, crew, jobs, power, market
 tests/                   pytest suite
 instance/                Created on first run: the database and secret key (not committed)
+docker/git-sync.sh       Updates the container from GitHub on start
+Dockerfile
+requirements.txt         Flask, PyJWT and ronovo-portfolio-auth (portfolio login, security questions, login lock)
+requirements-dev.txt     Adds pytest
 ```
 
 ## Station Layout

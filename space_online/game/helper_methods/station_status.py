@@ -9,7 +9,7 @@ from space_online.game.helper_methods.ui_panels import register_panel
 from space_online.game.maps import donut
 from space_online.game.objects.botany_items import refresh_all_planters_growth
 
-OXYGEN_STRESS_THRESHOLD = WARNING_THRESHOLDS[0]  # 30%
+OXYGEN_STRESS_THRESHOLD = WARNING_THRESHOLDS[0]
 BOTANY_MATURE_STAGE = 5
 
 SYSTEM_DISPLAY = (

@@ -89,13 +89,7 @@ def holdings_panel(game, state):
 @register_panel("notes", "Character Notes")
 def notes_panel(game, state):
     notes = []
-    for note in reversed(game.player_data.get("notes") or []):
-        if "timestamp" in note and "text" in note:
-            try:
-                formatted_time = datetime.datetime.fromisoformat(note["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
-            except (ValueError, TypeError):
-                formatted_time = note["timestamp"]
-            notes.append({"time": formatted_time, "text": note["text"]})
-        else:
-            notes.append({"time": None, "text": str(note)})
+    for note in reversed(game.player_data["notes"]):
+        formatted_time = datetime.datetime.fromisoformat(note["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
+        notes.append({"time": formatted_time, "text": note["text"]})
     return {"notes": notes}

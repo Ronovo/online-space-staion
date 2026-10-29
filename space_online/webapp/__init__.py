@@ -18,6 +18,8 @@ from flask import (
     session,
     url_for,
 )
+from ronovo_portfolio_auth import portfolio_sso, security_questions
+from ronovo_portfolio_auth.login_limiter import LockedOut, LoginLimiter
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from space_online.game.character_methods.character_creation import (
@@ -30,12 +32,13 @@ from space_online.game.character_methods.character_creation import (
 )
 from space_online.game.helper_methods.ui_panels import default_ui_state
 from space_online.game.main import SpaceStationGame
-from space_online.webapp import db, portfolio_sso, security_questions
+from space_online.webapp import db
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 MIN_PASSWORD_LENGTH = 6
 MAX_PASSWORD_LENGTH = 128
 PORTFOLIO_CHOICE_SECONDS = 600
+_logins = LoginLimiter()
 
 
 def _load_secret_key(instance_path):
@@ -85,7 +88,8 @@ def _check_csrf():
 def login_required(view):
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
-        if session.get("user_id") is None or db.get_user(session["user_id"]) is None:
+        user = db.get_user(session["user_id"]) if session.get("user_id") is not None else None
+        if user is None or not secrets.compare_digest(session.get("session_key", ""), _session_key(user)):
             session.clear()
             return redirect(url_for("login"))
         return view(*args, **kwargs)
@@ -104,10 +108,26 @@ def _run_game(user_id, action=None, args=None):
     return db.update_character(user_id, run)
 
 
-def _log_in(user_id, username):
+def _session_key(user):
+    """Changes whenever the password does, so a login session stored with it ends when the password is reset."""
+    return hashlib.sha256(user["password_hash"].encode("utf-8")).hexdigest()[:16]
+
+
+def _log_in(user):
     session.clear()
-    session["user_id"] = user_id
-    session["username"] = username
+    session["user_id"] = user["id"]
+    session["username"] = user["username"]
+    session["session_key"] = _session_key(user)
+
+
+def _login_error(username, user, password):
+    """Why this username and password can't log in, or None when they can. Wrong passwords count toward a lockout."""
+    try:
+        if _logins.attempt(username, lambda: user is not None and check_password_hash(user["password_hash"], password)):
+            return None
+    except LockedOut as locked:
+        return str(locked)
+    return "Incorrect username or password."
 
 
 def _portfolio_user(account):
@@ -148,7 +168,7 @@ def _register_routes(app):
             _check_csrf()
 
     def _enter(user):
-        _log_in(user["id"], user["username"])
+        _log_in(user)
         return redirect(url_for("home" if db.character_summary(user["id"]) else "new_character"))
 
     # The first portfolio login here asks whether to link an account the player already has or make a new one,
@@ -179,14 +199,13 @@ def _register_routes(app):
             return _enter(_portfolio_user(pending))
         if action == "link":
             user = db.get_user_by_name(username)
-            if user is None or not check_password_hash(user["password_hash"], request.form.get("password", "")):
-                flash("Incorrect username or password.", "error")
+            error = _login_error(username, user, request.form.get("password", ""))
+            if error:
+                flash(error, "error")
             elif not db.link_portfolio(user["id"], pending["sub"]):
                 flash("That account is already linked to another portfolio account.", "error")
             else:
-                _log_in(user["id"], user["username"])
-                if not user["security_answer_hash"]:
-                    return redirect(url_for("security_question"))
+                _log_in(user)
                 return redirect(url_for("home"))
         return render_template("link_account.html", name=pending["username"], username=username)
 
@@ -218,7 +237,7 @@ def _register_routes(app):
                     error = "That username is already taken."
                 else:
                     db.set_security_question(user_id, question, _answer_hash(answer))
-                    _log_in(user_id, username)
+                    _log_in(db.get_user(user_id))
                     return redirect(url_for("new_character"))
             flash(error, "error")
             return render_template("register.html", username=username, question=question,
@@ -230,27 +249,13 @@ def _register_routes(app):
         if request.method == "POST":
             username = request.form.get("username", "").strip()
             user = db.get_user_by_name(username)
-            if user is None or not check_password_hash(user["password_hash"], request.form.get("password", "")):
-                flash("Incorrect username or password.", "error")
+            error = _login_error(username, user, request.form.get("password", ""))
+            if error:
+                flash(error, "error")
                 return render_template("login.html", username=username)
-            _log_in(user["id"], user["username"])
-            # Accounts made before security questions set one straight after logging in.
-            if not user["security_answer_hash"]:
-                return redirect(url_for("security_question"))
+            _log_in(user)
             return redirect(url_for("home"))
         return render_template("login.html", username="")
-
-    @app.route("/security-question", methods=["GET", "POST"])
-    @login_required
-    def security_question():
-        question = request.form.get("question", "")
-        if request.method == "POST":
-            error = security_questions.problem(question, request.form.get("answer", ""))
-            if error is None:
-                db.set_security_question(session["user_id"], question, _answer_hash(request.form["answer"]))
-                return redirect(url_for("home"))
-            flash(error, "error")
-        return render_template("security_question.html", question=question, questions=security_questions.QUESTIONS)
 
     # Two steps: the username brings up its security question, then the answer and a new password change it.
     # Too many wrong answers lock resets for a while.
@@ -269,20 +274,19 @@ def _register_routes(app):
                 error = f"Passwords must be {MIN_PASSWORD_LENGTH}-{MAX_PASSWORD_LENGTH} characters."
             elif password != request.form.get("confirm_password", ""):
                 error = "Passwords do not match."
-            elif user and time.time() < user["reset_locked_until"]:
-                error = "Too many wrong answers. Try again in 15 minutes."
-            elif not user or not check_password_hash(
-                    user["security_answer_hash"], security_questions.normalize_answer(request.form["answer"])):
-                error = "That answer is wrong."
-                if user:
-                    failures = user["reset_failures"] + 1
-                    locked = failures >= security_questions.MAX_RESET_FAILURES
-                    db.set_reset_failures(user["id"], 0 if locked else failures,
-                                          time.time() + security_questions.RESET_LOCK_SECONDS if locked else 0)
             else:
-                db.set_password(user["id"], generate_password_hash(password))
-                flash("Password changed. Log in with your new password.", "info")
-                return redirect(url_for("login"))
+                tries = db.count_reset_try(user["id"], time.time()) if user else 0
+                if tries is None or tries > security_questions.MAX_RESET_FAILURES:
+                    error = "Too many wrong answers. Try again in 15 minutes."
+                elif not user or not check_password_hash(
+                        user["security_answer_hash"], security_questions.normalize_answer(request.form["answer"])):
+                    error = "That answer is wrong."
+                    if tries == security_questions.MAX_RESET_FAILURES:
+                        db.lock_resets(user["id"], time.time() + security_questions.RESET_LOCK_SECONDS)
+                else:
+                    db.set_password(user["id"], generate_password_hash(password))
+                    flash("Password changed. Log in with your new password.", "info")
+                    return redirect(url_for("login"))
             flash(error, "error")
         return render_template("reset_password.html", username=username, question=question)
 

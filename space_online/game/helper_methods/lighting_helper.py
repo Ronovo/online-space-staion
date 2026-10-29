@@ -1,7 +1,5 @@
 """Shared hallway/room lighting helpers."""
 
-from space_online.game.helper_methods.power_constants import default_station_power
-
 # Battery band -> allowed hallway_lighting range (inclusive)
 LIGHTING_BANDS = {
     "normal": (6, 8),
@@ -27,9 +25,6 @@ def clamp_lighting_for_battery(station_power):
     """
     if station_power is None:
         return False
-
-    if "system_levels" not in station_power:
-        station_power["system_levels"] = default_station_power()["system_levels"].copy()
 
     battery_level = station_power.get("battery_level", 100.0)
     band = battery_lighting_band(battery_level)
@@ -81,9 +76,7 @@ def lighting_style(hallway_lighting, place="hallway"):
     }
 
 
-def ensure_station_power_lighting(player_data):
-    """Ensure station_power exists and apply battery lighting clamp."""
-    if "station_power" not in player_data:
-        player_data["station_power"] = default_station_power()
+def clamped_station_power(player_data):
+    """station_power, with the lighting clamped for the battery level."""
     clamp_lighting_for_battery(player_data["station_power"])
     return player_data["station_power"]

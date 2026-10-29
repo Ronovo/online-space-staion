@@ -139,7 +139,6 @@ def drink_menu_select(game, state, args):
 
 @panel_action("drink_menu")
 def order(game, state, args):
-    """Process an order for a drink selected from the menu"""
     player_data = game.player_data
     drink_name = state.get("selected")
     drink_details = _current_drinks(game, state).get(drink_name)

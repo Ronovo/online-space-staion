@@ -5,7 +5,6 @@ for the duration of a single request: advance the master clock, run one
 client action, then describe the screen to render.
 """
 
-import copy
 import datetime
 import logging
 import random
@@ -19,7 +18,6 @@ from space_online.game.helper_methods.npc_movement import (
     step_wanderers,
 )
 from space_online.game.helper_methods.player_movement import PlayerMovementMixin
-from space_online.game.helper_methods.random_events import ensure_job_event
 from space_online.game.helper_methods.jail import (
     arrest_member,
     can_player_arrest,
@@ -43,11 +41,10 @@ from space_online.game.helper_methods.power_constants import (
     HIGH_MODE_SOLAR_DRAIN,
     calculate_discharge,
     calculate_solar_charge,
-    default_station_power,
 )
 from space_online.game.helper_methods.lighting_helper import (
     clamp_lighting_for_battery,
-    ensure_station_power_lighting,
+    clamped_station_power,
     lighting_style,
 )
 from space_online.game.helper_methods.oxygen_helper import (
@@ -68,7 +65,6 @@ from space_online.game.helper_methods.ui_panels import (
 )
 from space_online.game.character_methods import character_sheet  # noqa: F401  (registers the character sheet panels)
 from space_online.game.special_rooms import MedBay, Bridge, Security, Engineering, Bar, Botany, Quarters
-from space_online.game.special_rooms.botany import ensure_botany
 from space_online.game.special_rooms.shared import add_note as shared_add_note
 
 SPECIAL_ROOM_CLASSES = {
@@ -84,10 +80,9 @@ SPECIAL_ROOM_CLASSES = {
 SPECIAL_ROOM_TILES = donut.SPECIAL_ROOM_TILES
 SPECIAL_ROOM_HALLWAY = donut.SPECIAL_ROOM_HALLWAY
 
-# Real-time NPC wander cadence. NPC steps are gated to this interval inside
-# tick_master_clock rather than scaled by elapsed time, so walking the same
-# direction as an NPC doesn't spam hallway encounters and NPC pacing stays
-# independent of player clicks and of how long the player was away.
+# Real-time NPC wander cadence. NPC steps run at most this often inside tick(),
+# not scaled by elapsed time, so NPC pacing doesn't depend on player clicks or
+# on how long the player was away.
 NPC_MOVE_INTERVAL_SECONDS = 3.0
 
 # Master clock interval (real seconds). The browser polls at this rate;
@@ -117,7 +112,6 @@ class SpaceStationGame(PlayerMovementMixin):
         self.event_messages = None
         self.redirect = None
         self._messages = []
-        self._ensure_player_defaults()
         self.market_engine = StockMarketEngine.from_player_data(player_data)
 
     @property
@@ -127,13 +121,6 @@ class SpaceStationGame(PlayerMovementMixin):
     @property
     def ship_map(self):
         return self.player_data["ship_map"]
-
-    def _ensure_player_defaults(self):
-        self.player_data.setdefault("station_crew", [])
-        self.player_data.setdefault("ship_map", copy.deepcopy(donut.SHIP_MAP))
-        self.player_data.setdefault("station_power", default_station_power())
-        ensure_botany(self.player_data)
-        ensure_job_event(self.player_data)
 
     def to_save_data(self):
         """Market state synced and credits rounded, ready to persist."""
@@ -279,9 +266,8 @@ class SpaceStationGame(PlayerMovementMixin):
         power["battery_level"] = new_level
         clamp_lighting_for_battery(power)
 
-        # If battery level reaches critical point, trigger effects
         if 0 < new_level <= 10:
-            if random.random() < 0.2:  # 20% chance on each check
+            if random.random() < 0.2:
                 self.report(
                     "Low Power Warning",
                     "Warning: Station battery power low. Emergency lighting active. Please activate solar panels.",
@@ -354,14 +340,13 @@ class SpaceStationGame(PlayerMovementMixin):
             if (x, y) == SPECIAL_ROOM_HALLWAY[donut.BOTANY_KEY]:
                 cells.append((1, 0, "Botany Lab", "game.enter_room", {"room_key": donut.BOTANY_KEY}))
 
-        # Only show return to quarters at the starting junction
         if (x, y) == SPECIAL_ROOM_HALLWAY[donut.QUARTERS_KEY]:
             cells.append((3, 1, "Quarters", "game.enter_room", {"room_key": donut.QUARTERS_KEY}))
         return cells
 
     def hallway_view(self):
         location = self.ship_map[self.location_key()]
-        station_power = ensure_station_power_lighting(self.player_data)
+        station_power = clamped_station_power(self.player_data)
         style = lighting_style(station_power["system_levels"].get("hallway_lighting", 5), place="hallway")
         x = self.player_data["location"]["x"]
         y = self.player_data["location"]["y"]

@@ -9,7 +9,7 @@ def apply_alcohol_tick(player_data, elapsed_seconds):
     """Decay alcohol_percent by 5% per ALCOHOL_DECAY_SECONDS while above 0.
 
     Uses an accumulator in player_data["damage_timers"]["alcohol_decay_acc"]
-    so partial intervals carry across battery ticks.
+    so partial intervals carry across ticks.
     """
     alcohol = player_data.get("alcohol_percent", 0) or 0
     if alcohol <= 0 or elapsed_seconds <= 0:

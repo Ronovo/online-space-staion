@@ -103,7 +103,6 @@ class Engineering(SpecialRoomBase):
                 kind="warning",
             )
             return
-        _ensure_station_power_defaults(self.player_data)
         self.game.open_panel("engineering_panel")
 
 
@@ -113,17 +112,6 @@ def has_engineering_access(player_data):
         player_data.get("permissions", {}).get("engineering_station", False)
         or player_data.get("job") in ("Engineer", "Captain")
     )
-
-
-def _ensure_station_power_defaults(player_data):
-    """Initialize station_power keys used by the engineering panel."""
-    power = player_data.setdefault("station_power", {"battery_level": 25.0, "solar_charging": False})
-    power.setdefault(
-        "system_levels",
-        {control["key"]: control["default"] for control in SYSTEM_CONTROLS},
-    )
-    power.setdefault("power_mode", "balanced")
-    return power
 
 
 def _fabricator_items(category):
@@ -194,7 +182,7 @@ def _power_draw(key, value):
 
 @register_panel("engineering_panel", "Engineering Panel")
 def engineering_panel(game, state):
-    power = _ensure_station_power_defaults(game.player_data)
+    power = game.player_data["station_power"]
     battery_level = power["battery_level"]
     levels = power["system_levels"]
     systems = []

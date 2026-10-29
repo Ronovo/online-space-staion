@@ -373,7 +373,6 @@ def mix(game, state, args):
             "color": "red",
         }
 
-    # Clear the glass so the next drink must be mixed from scratch
     state["glass"] = []
     state.pop("selected_glass", None)
 

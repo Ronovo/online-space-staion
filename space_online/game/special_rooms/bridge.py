@@ -403,7 +403,6 @@ def assign(game, state, args):
         set_feedback(state, "Only the Captain can reassign the current Captain.", "orange")
         return
 
-    # Warn if the player Captain is demoting themselves with no other Captain left
     if (
         crew_index == PLAYER_CREW_INDEX
         and member.get("job") == "Captain"
@@ -433,8 +432,6 @@ def assign_role(game, crew_index, job):
         game.close_panel("job_assignment")
         return
 
-    # NPCs (not the player) immediately report to their new post
-    # rather than lingering at their old one.
     reassign_npc_post(member, job)
     solar_activated = _activate_solar_for_engineer(game, job)
 

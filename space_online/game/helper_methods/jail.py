@@ -27,7 +27,6 @@ PLAYER_ARREST_JOBS = frozenset({"Security Guard", "Captain"})
 
 
 def can_player_arrest(player_data):
-    """True if the player job can enforce warrants (Security Guard or Captain)."""
     return player_data.get("job") in PLAYER_ARREST_JOBS
 
 
@@ -45,24 +44,12 @@ def security_hallway_location():
     return {"x": tile[0], "y": tile[1]}
 
 
-def _ensure_jail_fields(member):
-    """Ensure jail / warrant / fine keys exist on a crew member."""
-    member.setdefault("in_jail", False)
-    member.setdefault("jail_release_at_seconds", None)
-    member.setdefault("warrant", False)
-    member.setdefault("warrant_reason", "")
-    member.setdefault("fine_amount", 0)
-    member.setdefault("fine_reason", "")
-
-
 def warrant_reason_text(member, default="No reason on file"):
-    """Return the warrant reason string, or default if missing/blank."""
     reason = (member.get("warrant_reason") or "").strip()
     return reason if reason else default
 
 
 def has_fine(member):
-    """Return True if the member has an unpaid fine."""
     try:
         return float(member.get("fine_amount", 0) or 0) > 0
     except (TypeError, ValueError):
@@ -149,7 +136,6 @@ def resolve_fine_with_guard(
     go to jail even with enough credits. Cannot afford -> jail.
     Returns 'paid', 'jailed', or None if there was no fine.
     """
-    _ensure_jail_fields(member)
     if not has_fine(member) or is_jailed(member):
         return None
 
@@ -159,7 +145,6 @@ def resolve_fine_with_guard(
     credits = float(member.get("credits", 0) or 0)
 
     if credits >= amount:
-        # Even with enough money, they may stubbornly refuse to pay.
         if random.random() < FINE_REFUSE_CHANCE:
             return _jail_for_fine(
                 member,
@@ -199,12 +184,6 @@ def resolve_fine_with_guard(
         elapsed_seconds=elapsed_seconds,
         refuse=False,
     )
-
-
-def ensure_crew_jail_fields(player_data, station_crew):
-    _ensure_jail_fields(player_data)
-    for npc in station_crew:
-        _ensure_jail_fields(npc)
 
 
 def is_jailed(member):
@@ -280,7 +259,6 @@ def arrest_member(
     Warrant stays active until release. ``elapsed_seconds`` is the current
     master game clock value; the release deadline is scheduled relative to it.
     """
-    _ensure_jail_fields(member)
     if is_jailed(member):
         return False
 
@@ -308,7 +286,6 @@ def arrest_member(
 
 def release_member(member, *, is_player=False, game, show_message=True):
     """Release a prisoner: clear jail state and warrant, place them outside Security."""
-    _ensure_jail_fields(member)
     if not is_jailed(member):
         return False
 
@@ -322,7 +299,6 @@ def release_member(member, *, is_player=False, game, show_message=True):
     if is_player:
         member["location"] = security_hallway_location()
     elif has_post(member):
-        # Posted NPCs return to their job post after release.
         location = location_for_post(member.get("job"))
         if location is not None:
             member["on_duty"] = True
@@ -342,7 +318,6 @@ def release_member(member, *, is_player=False, game, show_message=True):
 
 def add_jail_time(member, elapsed_seconds=0.0, seconds=ADD_TIME_SECONDS):
     """Extend an active sentence. Returns True if time was added."""
-    _ensure_jail_fields(member)
     if not is_jailed(member):
         return False
 
@@ -370,8 +345,6 @@ def tick_jail_releases(game):
     player_data = game.player_data
     station_crew = game.station_crew
     elapsed_seconds = get_elapsed_seconds(player_data)
-
-    ensure_crew_jail_fields(player_data, station_crew)
 
     if is_jailed(player_data) and jail_seconds_remaining(player_data, elapsed_seconds) <= 0:
         release_member(player_data, is_player=True, game=game, show_message=True)

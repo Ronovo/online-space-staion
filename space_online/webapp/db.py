@@ -11,7 +11,12 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    portfolio_sub TEXT UNIQUE,
+    security_question TEXT,
+    security_answer_hash TEXT,
+    reset_failures INTEGER NOT NULL DEFAULT 0,
+    reset_locked_until REAL NOT NULL DEFAULT 0
 );
 
 -- user_id is the primary key, so an account can never hold two characters.
@@ -23,14 +28,6 @@ CREATE TABLE IF NOT EXISTS characters (
     updated_at TEXT NOT NULL
 );
 """
-# Added after the first release, so they are created on older databases as well
-USER_COLUMNS = {
-    "portfolio_sub": "TEXT",
-    "security_question": "TEXT",
-    "security_answer_hash": "TEXT",
-    "reset_failures": "INTEGER NOT NULL DEFAULT 0",
-    "reset_locked_until": "REAL NOT NULL DEFAULT 0",
-}
 
 
 def _now():
@@ -57,11 +54,6 @@ def init_db(app):
         db = get_db()
         db.execute("PRAGMA journal_mode = WAL")
         db.executescript(SCHEMA)
-        existing = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
-        for column, kind in USER_COLUMNS.items():
-            if column not in existing:
-                db.execute(f"ALTER TABLE users ADD COLUMN {column} {kind}")
-        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_portfolio_sub ON users (portfolio_sub)")
         close_db()
 
 
@@ -97,9 +89,17 @@ def get_reset_user(username):
     ).fetchone()
 
 
-def set_reset_failures(user_id, failures, locked_until):
-    get_db().execute("UPDATE users SET reset_failures = ?, reset_locked_until = ? WHERE id = ?",
-                     (failures, locked_until, user_id))
+def count_reset_try(user_id, now):
+    """Counts one more reset try and returns the count so far, or None while resets are locked. It is one
+    statement, so tries sent at the same moment each get their own count."""
+    row = get_db().execute("""UPDATE users SET reset_failures = reset_failures + 1
+                              WHERE id = ? AND reset_locked_until <= ? RETURNING reset_failures""",
+                           (user_id, now)).fetchone()
+    return row[0] if row else None
+
+
+def lock_resets(user_id, until):
+    get_db().execute("UPDATE users SET reset_failures = 0, reset_locked_until = ? WHERE id = ?", (until, user_id))
 
 
 def set_password(user_id, password_hash):

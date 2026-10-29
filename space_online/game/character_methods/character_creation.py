@@ -1,5 +1,7 @@
+import copy
 import random
 
+from space_online.game.maps import donut
 from space_online.game.objects.items import build_default_locker_inventory
 from space_online.game.helper_methods.power_constants import default_station_power
 from space_online.game.helper_methods.stock_market import (
@@ -11,7 +13,6 @@ from space_online.game.helper_methods.npc_movement import location_for_post, pic
 from space_online.game.helper_methods.random_events import ensure_job_event
 from space_online.game.helper_methods.game_clock import default_game_clock
 
-# List of potential NPC names
 NPC_NAMES = [
     "Alex Chen", "Morgan Yu", "Sarah Connor", "John Shepard", "Ellen Ripley",
     "Isaac Clarke", "Samantha Carter", "Jean-Luc Picard", "Nyota Uhura", "Malcolm Reynolds",
@@ -207,7 +208,7 @@ def _generate_station_crew(player_name, job):
     station_crew = []
     available_names = NPC_NAMES.copy()
     if player_name in available_names:
-        available_names.remove(player_name)  # Avoid duplicate names
+        available_names.remove(player_name)
 
     department_heads = {
         "Captain": {"credits": 10000, "station": "bridge_station"},
@@ -275,7 +276,6 @@ def _generate_station_crew(player_name, job):
             )
         )
 
-    # Non-HoP games also get 2 Staff Assistants
     for i in range(2):
         station_crew.append(_make_staff_assistant(_pick_npc_name(f"StaffAssistant{i + 1}")))
     return station_crew
@@ -286,6 +286,9 @@ def create_character(player_name, department, job):
 
     Raises ValueError with a player-facing message when the input is invalid.
     """
+    # botany imports this module through the special rooms, so it can't be imported at the top.
+    from space_online.game.special_rooms.botany import new_botany
+
     player_name = (player_name or "").strip()
     if not player_name:
         raise ValueError("Please enter a character name.")
@@ -332,6 +335,8 @@ def create_character(player_name, department, job):
         "in_jail": False,
         "jail_release_at_seconds": None,
         "station_power": station_power,
+        "ship_map": copy.deepcopy(donut.SHIP_MAP),
+        "botany": new_botany(),
         "game_clock": default_game_clock(),
         "permissions": permissions_for_job(job),
         "notes": [],

@@ -64,22 +64,18 @@ def save_game(game):
     game.alert("Game Saved", "Your game has been saved successfully.")
 
 
-def _item_label(item):
-    return format_inventory_label(item) if isinstance(item, dict) else str(item)
-
-
 @register_panel("storage_locker", "Storage Locker")
 def storage_locker_panel(game, state):
     return {
         "locker": [
             {
-                "label": _item_label(item),
+                "label": format_inventory_label(item),
                 "description": item.get("description", "") if isinstance(item, dict) else "",
             }
             for item in ensure_locker_inventory(game.player_data)
         ],
         "inventory": [
-            {"label": _item_label(item), "valid": isinstance(item, dict) and "name" in item}
+            {"label": format_inventory_label(item), "valid": isinstance(item, dict) and "name" in item}
             for item in game.player_data.get("inventory", [])
         ],
     }

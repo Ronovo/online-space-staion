@@ -6,7 +6,7 @@ from space_online.game.helper_methods.door_control import (
     toggle_door_lock,
 )
 from space_online.game.helper_methods.lighting_helper import (
-    ensure_station_power_lighting,
+    clamped_station_power,
     lighting_style,
 )
 from space_online.game.helper_methods.npc_movement import any_npc_for_job, call_npc, on_duty_npc_for_job
@@ -25,7 +25,7 @@ PLAYER_CREW_INDEX = -1
 
 def room_lighting_chrome(player_data):
     """Clamp lighting for battery and return style dict for a special room shell."""
-    station_power = ensure_station_power_lighting(player_data)
+    station_power = clamped_station_power(player_data)
     level = station_power["system_levels"].get("hallway_lighting", 5)
     return lighting_style(level, place="room")
 
@@ -74,11 +74,7 @@ def player_has_subdepartment_access(player_data, allowed_subdepartments):
 
 
 def is_players_own_job(player_data, job_name):
-    """Return True if the player themself currently holds job_name.
-
-    Shared by every "Talk to X" / NPC-contact button so nobody can talk to
-    or call themselves (e.g. a Captain player never sees "Talk to Captain").
-    """
+    """Whether the player holds job_name, so nobody can talk to or call themselves."""
     return player_data.get("job") == job_name
 
 

@@ -5,19 +5,16 @@ market, NPC wandering) reads its "now" from a single elapsed-seconds
 counter here instead of calling ``datetime.now()`` independently. The
 counter starts at 0 for a new game and only ever advances forward.
 
-``last_real_time`` is the *only* wall-clock read left in the game: once
-per tick we measure how much real time passed since the previous tick and
-add that delta to ``elapsed_seconds``. Every other system works purely in
-terms of this master timer, using a start/end-vs-master-timer pattern:
-schedule an absolute ``*_at_seconds`` value, then compute "remaining" as
-that value minus the current ``elapsed_seconds``.
+Each tick adds the real time passed since ``last_real_time`` to
+``elapsed_seconds``. Game systems schedule an absolute ``*_at_seconds`` value
+against this timer and compute "remaining" as that value minus the current
+``elapsed_seconds``.
 """
 
 import datetime
 
 
 def default_game_clock():
-    """Return a fresh game_clock block for a new game (starts at 0)."""
     return {
         "elapsed_seconds": 0.0,
         "last_real_time": datetime.datetime.now().isoformat(),
@@ -25,7 +22,6 @@ def default_game_clock():
 
 
 def get_game_clock(player_data):
-    """Return the player_data game_clock block (always present on current saves)."""
     return player_data["game_clock"]
 
 
@@ -50,7 +46,6 @@ def advance(player_data):
 
 
 def get_elapsed_seconds(player_data):
-    """Return the current master timer value (seconds since new game)."""
     return get_game_clock(player_data).get("elapsed_seconds", 0.0)
 
 

@@ -13,7 +13,6 @@ from space_online.game.special_rooms.shared import (
 from space_online.game.helper_methods.ui_panels import choice_handler, panel_action, register_panel
 from space_online.game.maps.donut import MEDBAY_KEY
 
-# Cost multipliers: 1 credit per damage point, with type-based scaling
 COST_MULTIPLIERS = {
     "blunt": 1,
     "poison": 2,
@@ -324,7 +323,6 @@ class MedBay(SpecialRoomBase):
 
     @room_action
     def talk_to_doctor(self):
-        """Talk to a doctor who can provide healing for a fee based on damage"""
         if available_npc(self.game, "Doctor") is None:
             return
         exam = build_doctor_exam_message(self.player_data)
@@ -347,7 +345,6 @@ class MedBay(SpecialRoomBase):
 
     @room_action(station="medbay_station")
     def heal_player(self):
-        """Heal the player's limbs to full health"""
         original_health = self.player_data["limbs"].copy()
         for limb in self.player_data["limbs"]:
             self.player_data["limbs"][limb] = 100
@@ -376,7 +373,6 @@ class MedBay(SpecialRoomBase):
 
 @choice_handler("doctor_treatment")
 def pay_for_healing(game, total_cost, sober_cost=0):
-    """Pay credits for healing based on the calculated cost"""
     player_data = game.player_data
     if player_data["credits"] < total_cost:
         game.alert(

@@ -1,4 +1,3 @@
-# game/objects/items.py
 
 import copy
 import uuid
@@ -12,20 +11,6 @@ from space_online.game.objects.food import FOOD_ITEMS
 BASIC_TOOLKIT_TOOL_IDS = ("wrench", "screwdriver", "wirecutters")
 NON_STACKABLE_ITEM_IDS = frozenset({"basic_tools"})
 MEDKIT_DAMAGE_TYPES = (("burn", "Burn"), ("poison", "Poison"), ("oxygen", "Oxygen"))
-
-# Base structure for items
-# { 
-#     "id": "unique_item_identifier", 
-#     "name": "Display Name",               
-#     "description": "Item description.",
-#     "category": "Category",             # e.g., Tool, Book, Healing, Junk, Food, Drink, Special
-#     "attributes": {                     # Optional: Specific data for the item
-#         "content": "Text of the book...", # For books
-#         "heal_amount": 25,               # For healing items
-#         "skill_bonus": {"engineering": 5} # Example for tools
-#     },
-#     "actions": ["examine", "use", "read", "drop"] # List of possible actions
-# }
 
 # --- Define Book Content --- 
 WELCOME_GUIDE_CONTENT = """WELCOME TO SPACE STATION EXPLORER
@@ -43,7 +28,7 @@ IMPORTANT TIPS:
 We hope you enjoy your stay and contribute to our thriving community!
 """
 
-# Generated from the map's own coordinate data (see game/maps/donut.py) so it
+# Generated from the map's own coordinate data (see space_online/game/maps/donut.py) so it
 # always matches the actual station layout.
 STATION_MAP_CONTENT = render_map_text()
 
@@ -76,7 +61,7 @@ ALL_ITEMS = {
         "attributes": {},
         "actions": ["examine", "use", "drop"]
     },
-    "repair_tool": { # From random event
+    "repair_tool": {
         "id": "repair_tool",
         "name": "Repair Tool",
         "description": "A generic multi-tool for basic repairs.",
@@ -84,7 +69,7 @@ ALL_ITEMS = {
         "attributes": {},
         "actions": ["examine", "use", "drop"]
     },
-     "basic_tools": { # From locker
+     "basic_tools": {
         "id": "basic_tools",
         "name": "Basic Tools",
         "description": "A set containing a small wrench, screwdriver, and wirecutters.",
@@ -116,7 +101,7 @@ ALL_ITEMS = {
     },
     
     # --- Healing Items ---
-    "medkit": { # From random event / locker
+    "medkit": {
         "id": "medkit",
         "name": "Medkit",
         "description": "A standard first aid kit.",
@@ -182,19 +167,12 @@ def inventory_item_count(player_data):
 
 def format_inventory_label(item):
     """Display name with optional ' x N' when stacked."""
-    if isinstance(item, dict) and "name" in item:
-        name = item["name"]
-        qty = item_quantity(item)
-        if qty > 1:
-            return f"{name} x {qty}"
-        return name
-    return str(item)
+    qty = item_quantity(item)
+    return f"{item['name']} x {qty}" if qty > 1 else item["name"]
 
 
 def _is_non_stackable(item):
     """Container items must not stack — each has its own contents."""
-    if not isinstance(item, dict):
-        return False
     if item.get("id") in NON_STACKABLE_ITEM_IDS:
         return True
     attrs = item.get("attributes") or {}
@@ -265,14 +243,6 @@ def ensure_locker_inventory(player_data):
     return player_data["locker_inventory"]
 
 
-def ensure_hands(player_data):
-    """Return the player's left/right hand slots, creating them if missing."""
-    hands = player_data.setdefault("hands", {})
-    hands.setdefault("left", None)
-    hands.setdefault("right", None)
-    return hands
-
-
 HAND_SIDES = (("left", "Left Hand"), ("right", "Right Hand"))
 
 
@@ -310,7 +280,7 @@ def _is_equippable(item):
 
 
 def _hand_rows(player_data):
-    hands = ensure_hands(player_data)
+    hands = player_data["hands"]
     rows = []
     for side, label in HAND_SIDES:
         held = hands.get(side)
@@ -324,7 +294,7 @@ def _hand_rows(player_data):
 
 def _unequip(game, side):
     """Return a held item from hand back into inventory."""
-    hands = ensure_hands(game.player_data)
+    hands = game.player_data["hands"]
     item = hands.get(side)
     if not isinstance(item, dict):
         return
@@ -335,7 +305,7 @@ def _unequip(game, side):
 
 def _equip_to_hand(game, index, item_id, side):
     """Move one inventory unit into the given hand slot. Returns True on success."""
-    hands = ensure_hands(game.player_data)
+    hands = game.player_data["hands"]
     if side not in hands:
         return False
     if hands.get(side) is not None:
@@ -623,14 +593,6 @@ def _find_toolkit(game, uid):
     return None, None
 
 
-def _ensure_basic_tools_contents(item):
-    """Return the mutable contents list on a basic_tools inventory entry."""
-    attrs = item.setdefault("attributes", {})
-    if "contents" not in attrs or not isinstance(attrs["contents"], list):
-        attrs["contents"] = _default_basic_tools_contents()
-    return attrs["contents"]
-
-
 def _tool_name(tool):
     if isinstance(tool, dict):
         return tool.get("name", tool.get("id", "Tool"))
@@ -642,7 +604,7 @@ def basic_tools_panel(game, state):
     _, toolkit = _find_toolkit(game, state["uid"])
     if toolkit is None:
         return None
-    contents = _ensure_basic_tools_contents(toolkit)
+    contents = toolkit["attributes"]["contents"]
     selected = state.get("selected")
     return {
         "contents": [_tool_name(tool) for tool in contents],
@@ -660,7 +622,7 @@ def pull_out(game, state, args):
     _, toolkit = _find_toolkit(game, state["uid"])
     if toolkit is None:
         return
-    contents = _ensure_basic_tools_contents(toolkit)
+    contents = toolkit["attributes"]["contents"]
     if not contents:
         game.alert("Basic Tools", "The set is empty.")
         return
@@ -691,7 +653,7 @@ def put_back(game, state, args):
     _, toolkit = _find_toolkit(game, state["uid"])
     if toolkit is None:
         return
-    if not _put_back_candidates(game, _ensure_basic_tools_contents(toolkit)):
+    if not _put_back_candidates(game, toolkit["attributes"]["contents"]):
         game.alert(
             "Put Back",
             "No matching tools in your inventory to put back\n"
@@ -706,7 +668,7 @@ def put_back_tools_panel(game, state):
     _, toolkit = _find_toolkit(game, state["uid"])
     if toolkit is None:
         return None
-    candidates = _put_back_candidates(game, _ensure_basic_tools_contents(toolkit))
+    candidates = _put_back_candidates(game, toolkit["attributes"]["contents"])
     return {
         "tools": [{"index": idx, "label": format_inventory_label(item)} for idx, item in candidates],
         "selected": state.get("selected"),
@@ -723,7 +685,7 @@ def confirm(game, state, args):
     _, toolkit = _find_toolkit(game, state["uid"])
     if toolkit is None:
         return
-    contents = _ensure_basic_tools_contents(toolkit)
+    contents = toolkit["attributes"]["contents"]
     if state.get("selected") is None:
         game.alert("Put Back", "Select a tool first.")
         return
